@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { 
   Bot, 
   Layers, 
@@ -17,7 +17,6 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { TestIR, FrameworkType, UIElementModel } from './types/testAutomation';
-import { SAMPLE_TEST_IR, SAMPLE_UI_GRAPH } from './data/sampleData';
 import { generateAutomationSuite } from './utils/codeGenerators';
 import { InputStudio } from './components/InputStudio';
 import { CodeViewer } from './components/CodeViewer';
@@ -25,18 +24,51 @@ import { SprintUpdateEngine } from './components/SprintUpdateEngine';
 import { TestRunner } from './components/TestRunner';
 import { KnowledgeGraphViewer } from './components/KnowledgeGraphViewer';
 import { CiPipelineGenerator } from './components/CiPipelineGenerator';
-import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { WebhookSettings } from './components/WebhookSettings';
 import { GitHubPushModal } from './components/GitHubPushModal';
 
+const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then(module => ({ default: module.AnalyticsDashboard })));
+
+const EMPTY_TEST_IR: TestIR = {
+  id: 'draft', testCaseId: '', title: '', description: '', feature: '', sprint: '', priority: 'P2', baseUrl: '', steps: []
+};
+
 export default function App() {
-  const [currentTestIR, setCurrentTestIR] = useState<TestIR>(SAMPLE_TEST_IR);
+  const [currentTestIR, setCurrentTestIR] = useState<TestIR>(EMPTY_TEST_IR);
   const [hasGeneratedSuite, setHasGeneratedSuite] = useState(false);
   const [selectedFramework, setSelectedFramework] = useState<FrameworkType>('playwright-ts');
   const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'graph' | 'cicd' | 'analytics' | 'webhooks'>('inputs');
-  const [uiElements, setUiElements] = useState<UIElementModel[]>(SAMPLE_UI_GRAPH);
+  const [uiElements, setUiElements] = useState<UIElementModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
+  const [authState, setAuthState] = useState<'loading' | 'open' | 'required' | 'authorized'>('loading');
+  const [apiToken, setApiToken] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then(response => response.json())
+      .then(data => setAuthState(data.authenticationRequired ? 'required' : 'open'))
+      .catch(() => setAuthState('open'));
+  }, []);
+
+  const apiFetch = useCallback((input: RequestInfo | URL, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers);
+    if (apiToken) headers.set('Authorization', `Bearer ${apiToken}`);
+    return fetch(input, { ...init, headers });
+  }, [apiToken]);
+
+  const handleConnect = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthError('');
+    try {
+      const response = await fetch('/api/session', { headers: { Authorization: `Bearer ${apiToken}` } });
+      if (!response.ok) throw new Error('That access token was not accepted. Check it and try again.');
+      setAuthState('authorized');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not connect to the workspace.');
+    }
+  };
 
   // Derive generated code files from active Test IR and framework
   const generatedFiles = generateAutomationSuite(currentTestIR, selectedFramework);
@@ -97,6 +129,23 @@ export default function App() {
     setActiveView('code');
   };
 
+  if (authState === 'loading') return <div className="min-h-screen grid place-items-center bg-slate-100 text-sm text-slate-600">Connecting to AutoTest Architect…</div>;
+  if (authState === 'required') return (
+    <main className="min-h-screen grid place-items-center bg-slate-100 px-4">
+      <form onSubmit={handleConnect} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-indigo-600 text-white"><ShieldCheck className="h-5 w-5" /></div>
+          <div><h1 className="text-lg font-semibold text-slate-900">AutoTest Architect</h1><p className="text-sm text-slate-500">Secure workspace access</p></div>
+        </div>
+        <label htmlFor="workspace-token" className="mb-1.5 block text-sm font-medium text-slate-700">Workspace access token</label>
+        <input id="workspace-token" type="password" autoComplete="current-password" value={apiToken} onChange={event => setApiToken(event.target.value)} required className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+        {authError && <p role="alert" className="mt-3 text-sm text-rose-700">{authError}</p>}
+        <button type="submit" className="mt-5 w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">Connect securely</button>
+        <p className="mt-4 text-xs leading-5 text-slate-500">Your access token stays in page memory and is cleared when you reload or close this page.</p>
+      </form>
+    </main>
+  );
+
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans">
       {/* Top Header */}
@@ -111,12 +160,9 @@ export default function App() {
                 <h1 className="text-base font-bold text-slate-900 tracking-tight">
                   AutoTest Architect
                 </h1>
-                <span className="text-2xs font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">
-                  Test Automation
-                </span>
               </div>
               <p className="text-2xs text-slate-500">
-                Test design · Code generation · CI pipelines · QA analytics
+                Test design · Code generation · CI pipelines
               </p>
             </div>
           </div>
@@ -192,8 +238,11 @@ export default function App() {
 
           <button
             onClick={() => setActiveView('code')}
+            disabled={!hasGeneratedSuite}
             className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'code'
+              !hasGeneratedSuite
+                ? 'cursor-not-allowed border-transparent text-slate-300'
+                : activeView === 'code'
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
@@ -283,25 +332,25 @@ export default function App() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
-                {currentTestIR.testCaseId}
+                {currentTestIR.testCaseId || 'Draft'}
               </span>
               <h2 className="text-sm font-semibold text-slate-900">
-                {currentTestIR.title}
+                {hasGeneratedSuite ? currentTestIR.title : 'No test suite generated yet'}
               </h2>
             </div>
             <p className="text-xs text-slate-500">
-              {currentTestIR.description}
+              {hasGeneratedSuite ? currentTestIR.description : 'Add your application URL and test steps to create your first automation suite.'}
             </p>
           </div>
 
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Steps:</span>
-              <span className="font-semibold text-slate-800">{currentTestIR.steps.length} automated steps</span>
+              <span className="font-semibold text-slate-800">{currentTestIR.steps.length} steps</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Base URL:</span>
-              <span className="font-mono text-indigo-600">{currentTestIR.baseUrl}</span>
+              <span className="font-mono text-indigo-600">{currentTestIR.baseUrl || 'Add target URL'}</span>
             </div>
           </div>
         </div>
@@ -314,6 +363,7 @@ export default function App() {
             setIsLoading={setIsLoading}
             currentTestIR={currentTestIR}
             canAppendToExisting={hasGeneratedSuite}
+            apiFetch={apiFetch}
           />
         </div>
 
@@ -332,6 +382,7 @@ export default function App() {
             onApplySprintPatch={handleApplySprintPatch}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
+            apiFetch={apiFetch}
           />
         )}
 
@@ -357,14 +408,15 @@ export default function App() {
         )}
 
         {activeView === 'analytics' && (
-          <AnalyticsDashboard
-            currentTestIR={currentTestIR}
-          />
+          <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Loading analytics…</div>}>
+            <AnalyticsDashboard currentTestIR={currentTestIR} />
+          </Suspense>
         )}
 
         {activeView === 'webhooks' && (
           <WebhookSettings
             currentTestIR={currentTestIR}
+            apiFetch={apiFetch}
           />
         )}
       </main>

@@ -138,7 +138,7 @@ webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response
 
     res.json({
       success: externalSuccess,
-      delivered: true,
+      delivered: externalSuccess,
       provider: targetWebhook.type,
       externalSuccess,
       externalStatus,

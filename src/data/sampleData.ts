@@ -8,9 +8,9 @@ export const SAMPLE_TEST_IR: TestIR = {
   feature: 'Authentication',
   sprint: 'Sprint 24',
   priority: 'P0',
-  baseUrl: 'https://demo-shop.autotest.io',
+  baseUrl: 'https://app.example.com',
   preconditions: [
-    'User account exists with username: test_qa_user',
+    'A test user account is configured in the target environment',
     'Application is accessible over HTTPS'
   ],
   postconditions: [
@@ -40,7 +40,7 @@ export const SAMPLE_TEST_IR: TestIR = {
           { strategy: 'css', selector: "#username", confidence: 0.88 }
         ]
       },
-      value: 'qa_engineer@enterprise.com'
+      value: 'qa.user@example.test'
     },
     {
       id: 'step-3',
@@ -57,7 +57,7 @@ export const SAMPLE_TEST_IR: TestIR = {
           { strategy: 'css', selector: "input[type='password']", confidence: 0.91 }
         ]
       },
-      value: 'SecurePass2026!'
+      value: 'replace-with-test-password'
     },
     {
       id: 'step-4',
@@ -139,10 +139,22 @@ export const SAMPLE_UI_GRAPH: UIElementModel[] = [
 
 export const PRESET_TEST_SHEETS = [
   {
+    id: 'authentication',
+    name: 'Authentication: Sign-in flow',
+    feature: 'Authentication',
+    baseUrl: 'https://app.example.com',
+    stepsText: `Test Case: TC_AUTH_001 - Standard User Authentication Flow
+Step 1: Navigate to /login
+Step 2: Fill Username with "qa.user@example.test"
+Step 3: Fill Password with "replace-with-test-password"
+Step 4: Click "Sign In" button (data-testid: login-submit-btn)
+Step 5: Verify the dashboard welcome banner is visible (data-testid: dashboard-welcome-banner)`
+  },
+  {
     id: 'ecom-checkout',
     name: 'E-Commerce: Cart to Checkout Flow',
     feature: 'E-Commerce Checkout',
-    baseUrl: 'https://demo-ecommerce.autotest.io',
+    baseUrl: 'https://shop.example.com',
     stepsText: `Test Case: TC_CHECKOUT_004 - Guest Checkout with Credit Card
 Step 1: Open store catalog page at /products
 Step 2: Click on item card "Wireless Noise Cancelling Headphones"
@@ -151,7 +163,7 @@ Step 4: Click Shopping Cart header icon to open drawer
 Step 5: Click "Proceed to Checkout" button
 Step 6: Fill Shipping Address: "100 Market St, San Francisco, CA"
 Step 7: Click "Continue to Payment"
-Step 8: Fill card number "4242424242424242"
+Step 8: Fill the sandbox card number using a value from the test environment
 Step 9: Click "Place Order" button
 Step 10: Verify confirmation message "Order # confirmed!" is visible`
   },
@@ -159,7 +171,7 @@ Step 10: Verify confirmation message "Order # confirmed!" is visible`
     id: 'crm-lead',
     name: 'CRM: Lead Creation & Assignment',
     feature: 'CRM Lead Management',
-    baseUrl: 'https://sales-crm.enterprise.io',
+    baseUrl: 'https://crm.example.com',
     stepsText: `Test Case: TC_CRM_201 - Create and Assign New Sales Prospect
 Step 1: Navigate to /leads/new
 Step 2: Enter Lead Name "Acme Corp - Cloud Migration"
@@ -174,16 +186,16 @@ Step 8: Assert URL redirects to /leads/view/*`
     id: 'banking-transfer',
     name: 'FinTech: Quick Wire Transfer Verification',
     feature: 'Banking Transfers',
-    baseUrl: 'https://online.capital-bank.io',
+    baseUrl: 'https://banking.example.com',
     stepsText: `Test Case: TC_WIRE_102 - Intra-bank Account Transfer
 Step 1: Open transfers portal at /transfer/funds
 Step 2: Select source account "Checking (...4819)"
-Step 3: Enter recipient routing number "021000021"
+Step 3: Enter the sandbox recipient routing number
 Step 4: Enter amount "450.00"
 Step 5: Fill memo "Monthly office supplies"
 Step 6: Click "Review Transfer" button
 Step 7: Verify OTP modal appears with title "Two-Factor Verification"
-Step 8: Enter OTP code "992144"
+Step 8: Enter a sandbox OTP from the test environment
 Step 9: Click "Authorize & Send"
 Step 10: Assert confirmation text "Transfer of $450.00 submitted"`
   }

@@ -15,7 +15,7 @@ You need:
 
 - Access to the AutoTest Architect workspace. In production, enter the workspace access token provided by your administrator when prompted. The token stays in page memory and is cleared when you reload or close the page.
 - The target application's full base URL, for example `https://staging.example.com`.
-- At least one source of test information: written steps, a screenshot/mockup, a video walkthrough, or HTML/accessibility DOM markup.
+- At least one source of test information: written steps, an Excel/CSV file, a screenshot/mockup, a video walkthrough, or HTML/accessibility DOM markup.
 - For AI-powered screenshot and video analysis, a deployment administrator must configure `GEMINI_API_KEY` on the server. Video analysis requires this key. Written text and DOM inputs have a deterministic fallback when Gemini is not configured or is temporarily unavailable; screenshot interpretation needs the AI service.
 
 For a local installation and deployment secrets, see the [README](README.md). Do not paste API keys, workspace tokens, real passwords, payment details, or customer data into test instructions or recordings.
@@ -55,7 +55,9 @@ The generated suite reflects the information it could infer from the supplied ma
 
 Use this for a written test specification or when you know the actions and expected results.
 
-- Paste steps into the text area, or upload a `.csv`, `.txt`, or `.md` file.
+- Paste steps into the text area, or upload an Excel workbook (`.xlsx`, `.xls`, `.xlsm`, or `.xlsb`), `.csv`, `.txt`, or `.md` file.
+- Excel workbook contents are parsed in the browser. Up to the first five worksheets and 1,000 rows per worksheet are imported from files smaller than 10 MB. Macro code is not run. Check the imported rows and steps before generating.
+- The spreadsheet contents are included in the normal analysis request only when you select **Synthesize Test IR & Generate Code**. If Gemini is configured, the request may be processed by that service.
 - Use one action per line where practical. Include the page, control label, input value, and expected outcome.
 - You can use **Dictate with Voice** to speak steps into the text area if your browser supports speech recognition and you grant microphone access.
 - **Read Aloud** uses your browser's speech synthesis to read the entered text. It does not analyze a recording.
@@ -217,7 +219,8 @@ Webhook settings are stored server-side, encrypted at rest in production, and de
 | Problem | What to check |
 | --- | --- |
 | Workspace token is rejected | Confirm you copied the production `APP_API_TOKEN` from the administrator's approved secret channel. Check for extra spaces and ask the administrator to confirm the server configuration. |
-| Text analysis returns generic or incomplete steps | Add one action per line, name controls by their visible label, include the expected result, and confirm the base URL. Try again when the AI provider is available. |
+| Text or spreadsheet analysis returns generic or incomplete steps | Add one action per line, include descriptive column headers, name controls by their visible label, include the expected result, and confirm the base URL. Try again when the AI provider is available. |
+| Excel workbook does not upload | Use `.xlsx`, `.xls`, `.xlsm`, or `.xlsb`, keep the file under 10 MB, and confirm the first five worksheets contain data. Password-protected or damaged workbooks may not parse. |
 | Screenshot is not interpreted | Confirm Gemini is configured on the server, use a clear supported image under 10 MB, and add accompanying instructions. |
 | Video analysis says Gemini is not configured | Ask the administrator to set `GEMINI_API_KEY` on the server and restart/redeploy the service. |
 | Video upload fails or takes too long | Check format and size (maximum 2 GB in the app), network stability, hosting/proxy body-size and timeout settings, temporary disk space, and Gemini quota. Large uploads require the host to support them. |

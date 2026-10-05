@@ -29,6 +29,8 @@ interface InputStudioProps {
 export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoading, setIsLoading, currentTestIR, canAppendToExisting, apiFetch }) => {
   const [activeTab, setActiveTab] = useState<'sheet' | 'screenshot' | 'video' | 'dom'>('sheet');
   const [testCaseText, setTestCaseText] = useState('');
+  const [importNotice, setImportNotice] = useState('');
+  const [isImportingFile, setIsImportingFile] = useState(false);
   const [featureName, setFeatureName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [appendToExisting, setAppendToExisting] = useState(false);
@@ -87,6 +89,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
             if (event.results[i].isFinal) {
               const phrase = event.results[i][0].transcript.trim();
               if (phrase) {
+                setImportNotice('');
                 setTestCaseText((prev) => {
                   const cleaned = prev ? prev.trimEnd() : '';
                   // If last char is not a newline, add a newline or step index
@@ -173,9 +176,11 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
 
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -185,13 +190,73 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
         setScreenshotMimeType(file.type || 'image/png');
       };
       reader.readAsDataURL(file);
+    } else if (['xlsx', 'xls', 'xlsm', 'xlsb'].includes(extension)) {
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMessage('Choose an Excel workbook smaller than 10 MB.');
+        input.value = '';
+        return;
+      }
+      setErrorMessage(null);
+      setIsImportingFile(true);
+      setImportNotice('Reading spreadsheet…');
+      try {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(await file.arrayBuffer(), { sheetRows: 1001 });
+        const sheetNames = workbook.SheetNames.slice(0, 5);
+        const sections: string[] = [];
+        let importedRows = 0;
+        let reachedRowLimit = false;
+
+        for (const sheetName of sheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          if (!worksheet) continue;
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '', raw: false, blankrows: false });
+          const lines = rows.map(row => {
+            const values = row.map(value => String(value ?? '').replace(/[\r\n]+/g, ' ').replace(/\|/g, '\\|').trim());
+            let lastValue = values.length - 1;
+            while (lastValue >= 0 && !values[lastValue]) lastValue -= 1;
+            return values.slice(0, lastValue + 1).join(' | ');
+          }).filter(Boolean);
+          if (lines.length) {
+            sections.push(`## Worksheet: ${sheetName}\n${lines.join('\n')}`);
+            importedRows += lines.length;
+            if (lines.length >= 1001) reachedRowLimit = true;
+          }
+        }
+
+        if (!sections.length) throw new Error('No test steps or data were found in the first five worksheets.');
+        setTestCaseText(sections.join('\n\n'));
+        const notes = [
+          `Loaded ${importedRows} rows from ${sections.length} worksheet${sections.length === 1 ? '' : 's'} in ${file.name}.`,
+          workbook.SheetNames.length > 5 ? 'Only the first five worksheets were imported.' : '',
+          reachedRowLimit ? 'A worksheet reached the 1,000-row limit; later rows were not imported.' : ''
+        ].filter(Boolean);
+        setImportNotice(notes.join(' '));
+      } catch (error) {
+        setImportNotice('');
+        setErrorMessage(error instanceof Error ? `Could not read this workbook. ${error.message}` : 'Could not read this workbook. Save it as .xlsx or .xls and try again.');
+      } finally {
+        input.value = '';
+        setIsImportingFile(false);
+      }
     } else {
-      // CSV or Text file
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setTestCaseText(event.target?.result as string);
-      };
-      reader.readAsText(file);
+      if (!['txt', 'csv', 'md'].includes(extension)) {
+        setErrorMessage('Choose an Excel workbook (.xlsx, .xls, .xlsm, .xlsb), CSV, Markdown, text file, or screenshot.');
+        input.value = '';
+        return;
+      }
+      setIsImportingFile(true);
+      try {
+        setTestCaseText(await file.text());
+        setImportNotice(`Loaded ${file.name}. Review the content before generating tests.`);
+        setErrorMessage(null);
+      } catch {
+        setImportNotice('');
+        setErrorMessage('Could not read this file. Try saving it as .csv, .md, or .txt.');
+      } finally {
+        input.value = '';
+        setIsImportingFile(false);
+      }
     }
   };
 
@@ -280,6 +345,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       const explicitNavigation = /(?:^|\n)\s*(?:step\s*\d*[:.)-]?\s*)?(?:navigate|go to|open|visit|launch)\b/im.test(textContent);
       onIRGenerated({ ...data.testIR, baseUrl: baseUrl.trim(), feature: featureName.trim() || data.testIR.feature }, appendToExisting, explicitNavigation);
       setTestCaseText('');
+      setImportNotice('');
       setAppendToExisting(true);
     } catch (err: any) {
       console.error(err);
@@ -401,7 +467,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <label className="text-xs font-medium text-slate-700">
-                Manual Test Specification / Excel Steps (CSV, Markdown, or text list)
+                Manual Test Specification / Excel Steps
               </label>
 
               <div className="flex items-center gap-3">
@@ -457,8 +523,8 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
 
                 <label className="cursor-pointer text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
                   <Upload className="w-3.5 h-3.5" />
-                  Upload .csv / .txt
-                  <input type="file" accept=".txt,.csv,.md" onChange={handleFileUpload} className="hidden" />
+                  Upload file
+                  <input type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.md,.txt,text/csv,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.ms-excel.sheet.binary.macroEnabled.12" onChange={handleFileUpload} className="hidden" />
                 </label>
               </div>
             </div>
@@ -473,10 +539,12 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
             <textarea
               rows={9}
               value={testCaseText}
-              onChange={(e) => setTestCaseText(e.target.value)}
+              onChange={(e) => { setTestCaseText(e.target.value); setImportNotice(''); }}
               placeholder="Paste test steps here or click 'Dictate with Voice' to speak..."
               className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
             />
+            {importNotice && <p role="status" className="mt-2 text-xs text-emerald-700">{importNotice} Imported content stays in your browser and is sent for analysis only when you generate tests.</p>}
+            <p className="mt-1 text-2xs text-slate-500">Supported: Excel .xlsx, .xls, .xlsm, .xlsb · CSV · Markdown · TXT. Up to 5 worksheets and 1,000 rows per sheet; macros are not run.</p>
           </div>
         )}
 
@@ -599,13 +667,18 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
 
           <button
             onClick={handleGenerateIR}
-            disabled={isLoading}
+            disabled={isLoading || isImportingFile}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-lg text-xs font-medium transition-all shadow-xs"
           >
             {isLoading ? (
               <>
                 <Sparkles className="w-4 h-4 animate-spin" />
                 Analyzing Multi-Modal Input...
+              </>
+            ) : isImportingFile ? (
+              <>
+                <Sparkles className="w-4 h-4 animate-spin" />
+                Reading spreadsheet…
               </>
             ) : (
               <>

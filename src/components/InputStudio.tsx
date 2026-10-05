@@ -58,6 +58,12 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
   }, [canAppendToExisting]);
 
   useEffect(() => {
+    if (!canAppendToExisting) return;
+    setFeatureName(currentTestIR.feature || '');
+    setBaseUrl(currentTestIR.baseUrl || '');
+  }, [canAppendToExisting, currentTestIR.feature, currentTestIR.baseUrl]);
+
+  useEffect(() => {
     if (!videoFile) { setVideoPreviewUrl(''); return; }
     const url = URL.createObjectURL(videoFile);
     setVideoPreviewUrl(url);

@@ -38,8 +38,10 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = pipeline.filename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
@@ -54,7 +56,7 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Auto-generate ready-to-commit CI configuration pipelines configured for {selectedFramework.toUpperCase()} suites with headless browser dependencies, artifacts, and reporting.
+            Generate a CI configuration for the {selectedFramework.toUpperCase()} suite. Review the runner requirements and target URL before committing it.
           </p>
         </div>
 
@@ -131,7 +133,7 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
         <div className="px-6 py-3 bg-slate-900/80 border-t border-slate-800 flex items-center justify-between text-2xs text-slate-400">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Pre-configured with caching, headless browser runtime, failure artifact retention, and env secrets.</span>
+            <span>Framework-specific setup, target URL wiring, and test report artifacts are included where supported.</span>
           </div>
           <span className="font-mono text-slate-400">Engine: {selectedFramework}</span>
         </div>

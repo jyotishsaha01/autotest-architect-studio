@@ -25,10 +25,10 @@ export async function exportSuiteAsZip(
     installCommand = 'pip install -r requirements.txt && playwright install';
     runCommand = 'pytest tests/';
   } else if (framework === 'selenium-java') {
-    installCommand = 'mvn clean compile';
+    installCommand = 'Java 17+ and Maven 3.9+ are required; Maven downloads project dependencies automatically.';
     runCommand = 'mvn test';
   } else if (framework === 'selenium-python') {
-    installCommand = 'pip install selenium pytest webdriver-manager';
+    installCommand = 'pip install -r requirements.txt';
     runCommand = 'pytest tests/';
   }
 
@@ -62,41 +62,14 @@ This suite includes a pre-configured GitHub Actions workflow located at \`.githu
 
   zip.file('README.md', readmeContent);
 
-  // Generate package.json or requirements.txt if needed
-  if (framework === 'playwright-ts' || framework === 'playwright-js') {
-    const isTypeScript = framework === 'playwright-ts';
-    const pkgJson = {
-      ...(isTypeScript ? {} : { type: 'module' }),
-      name: `${ir.feature.toLowerCase().replace(/[^a-z0-9]/g, '-')}-tests`,
-      version: '1.0.0',
-      private: true,
-      scripts: {
-        test: 'playwright test',
-        'test:headed': 'playwright test --headed',
-        'test:ui': 'playwright test --ui',
-        report: 'playwright show-report'
-      },
-      devDependencies: {
-        '@playwright/test': '^1.63.0',
-        ...(isTypeScript ? { '@types/node': '^22.0.0', typescript: '^5.0.0' } : {})
-      }
-    };
-    zip.file('package.json', JSON.stringify(pkgJson, null, 2));
-  } else if (framework === 'playwright-python' || framework === 'selenium-python') {
-    const reqTxt = framework === 'playwright-python'
-      ? 'playwright>=1.44.0\npytest>=8.0.0\npytest-playwright>=0.5.0\n'
-      : 'selenium>=4.20.0\npytest>=8.0.0\nwebdriver-manager>=4.0.0\n';
-    zip.file('requirements.txt', reqTxt);
-  }
-
   // Generate blob and trigger browser download
   const blob = await zip.generateAsync({ type: 'blob' });
   const downloadUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = downloadUrl;
-  a.download = `${ir.testCaseId.toLowerCase()}_${framework}_suite.zip`;
+  a.download = `${String(ir.testCaseId || 'test').toLowerCase().replace(/[^a-z0-9_-]+/g, '_')}_${framework}_suite.zip`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(downloadUrl);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 }

@@ -89,6 +89,26 @@ aiRouter.post('/analyze-input', async (req: Request, res: Response) => {
     baseUrl
   } = req.body;
 
+  if (!process.env.GEMINI_API_KEY) {
+    if (imageBase64) {
+      return res.status(503).json({
+        success: false,
+        error: 'Screenshot analysis needs the configured AI service. Ask your administrator to check GEMINI_API_KEY and try again.'
+      });
+    }
+    const fallbackIR = buildFallbackIR(
+      featureName || 'E-Commerce Checkout',
+      baseUrl || 'https://boat.com',
+      textContent || '',
+      domSnippet
+    );
+    return res.json({
+      success: true,
+      testIR: fallbackIR,
+      notice: 'Generated with the built-in parser. Configure GEMINI_API_KEY for AI-assisted analysis.'
+    });
+  }
+
   try {
     const parts: any[] = [];
 
@@ -289,6 +309,9 @@ Use testCaseId from the existing suite when extending it, otherwise make a conci
  * Compares current Test IR/Locators against new Sprint changes (new screenshot, video notes, or test steps)
  */
 aiRouter.post('/detect-sprint-diff', async (req: Request, res: Response) => {
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(503).json({ error: 'Sprint change analysis needs the configured AI service. Ask your administrator to check GEMINI_API_KEY.' });
+  }
   try {
     const {
       currentTestIR,
@@ -372,6 +395,9 @@ Return ONLY valid JSON matching this schema:
  * When an execution fails due to a broken locator or DOM drift, analyzes DOM & intent to heal the locator
  */
 aiRouter.post('/self-heal-locator', async (req: Request, res: Response) => {
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(503).json({ error: 'Locator repair suggestions need the configured AI service. Ask your administrator to check GEMINI_API_KEY.' });
+  }
   try {
     const { failedStep, failedLocator, currentDomOrSnippet, screenshotBase64, testIntent } = req.body;
     const ai = getGeminiClient();

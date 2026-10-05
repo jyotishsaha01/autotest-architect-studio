@@ -48,8 +48,10 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = activeFile.filename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleExportZip = async () => {

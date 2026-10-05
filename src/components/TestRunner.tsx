@@ -11,18 +11,24 @@ export const TestRunner: React.FC<TestRunnerProps> = ({ currentTestIR, selectedF
   const [copied, setCopied] = useState(false);
   const isPlaywright = selectedFramework.startsWith('playwright-');
   const setupCommands = selectedFramework === 'playwright-python'
-    ? 'pip install -r requirements.txt\nplaywright install chromium\npytest tests/'
+    ? 'pip install -r requirements.txt\nplaywright install chromium'
     : selectedFramework === 'selenium-python'
-      ? 'pip install -r requirements.txt\npytest tests/'
+      ? 'pip install -r requirements.txt'
       : selectedFramework === 'selenium-java'
-        ? 'mvn test'
-        : 'npm install\nnpx playwright install chromium\nnpx playwright test';
-  const baseUrlCommand = selectedFramework.startsWith('playwright-')
-    ? `BASE_URL=${JSON.stringify(currentTestIR.baseUrl)} npx playwright test`
-    : null;
+        ? ''
+        : 'npm install\nnpx playwright install chromium';
+  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  const baseUrlCommand = selectedFramework === 'playwright-ts' || selectedFramework === 'playwright-js'
+    ? `BASE_URL=${shellQuote(currentTestIR.baseUrl)} npx playwright test`
+    : selectedFramework === 'playwright-python'
+      ? `BASE_URL=${shellQuote(currentTestIR.baseUrl)} pytest tests/`
+      : selectedFramework === 'selenium-java'
+        ? `APP_URL=${shellQuote(currentTestIR.baseUrl)} mvn test`
+        : `APP_URL=${shellQuote(currentTestIR.baseUrl)} pytest tests/`;
+  const commandBlock = [setupCommands, baseUrlCommand].filter(Boolean).join('\n');
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(baseUrlCommand || setupCommands);
+    await navigator.clipboard.writeText(commandBlock);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
@@ -53,14 +59,14 @@ export const TestRunner: React.FC<TestRunnerProps> = ({ currentTestIR, selectedF
 
         <div>
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-slate-900">{isPlaywright ? 'Run with Playwright' : 'Setup commands'}</h3>
+            <h3 className="text-sm font-semibold text-slate-900">{isPlaywright ? 'Run with Playwright' : 'Setup & run'}</h3>
             <button onClick={handleCopy} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Copied' : 'Copy command'}
             </button>
           </div>
-          <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100"><code>{setupCommands}</code></pre>
-          {baseUrlCommand && <p className="mt-2 text-xs text-slate-500">Set <code className="rounded bg-slate-100 px-1">BASE_URL</code> to your environment URL when running the suite. Active test target: <span className="font-mono">{currentTestIR.baseUrl}</span>.</p>}
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100"><code>{commandBlock}</code></pre>
+          <p className="mt-2 text-xs text-slate-500">The copied command sets the active target URL for this run. Replace it with the appropriate environment URL when needed.</p>
         </div>
 
       </div>

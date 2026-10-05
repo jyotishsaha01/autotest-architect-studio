@@ -41,6 +41,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
 
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState<string>('');
+  const [screenshotMimeType, setScreenshotMimeType] = useState('image/png');
   const [videoNotes, setVideoNotes] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState('');
@@ -175,6 +176,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       reader.onload = (event) => {
         setScreenshotData(event.target?.result as string);
         setScreenshotName(file.name);
+        setScreenshotMimeType(file.type || 'image/png');
       };
       reader.readAsDataURL(file);
     } else {
@@ -257,7 +259,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
           inputType: activeTab,
           textContent,
           imageBase64: screenshotData,
-          imageMimeType: 'image/png',
+          imageMimeType: screenshotMimeType,
           domSnippet: activeTab === 'dom' ? domSnippet : (domSnippet || undefined),
           featureName,
           baseUrl
@@ -484,7 +486,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
                     Loaded: <span className="font-medium text-slate-800">{screenshotName}</span>
                   </div>
                   <button
-                    onClick={() => { setScreenshotData(null); setScreenshotName(''); }}
+                    onClick={() => { setScreenshotData(null); setScreenshotName(''); setScreenshotMimeType('image/png'); }}
                     className="text-xs text-rose-600 hover:underline font-medium"
                   >
                     Remove image

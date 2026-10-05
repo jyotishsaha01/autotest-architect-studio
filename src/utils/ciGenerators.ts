@@ -10,6 +10,9 @@ export interface CiPipelineConfig {
   description: string;
 }
 
+const yamlString = (value: string) => `'${String(value).replace(/'/g, "''")}'`;
+const groovyString = (value: string) => `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+
 export function generateCiPipeline(tool: CiToolType, framework: FrameworkType, ir: TestIR): CiPipelineConfig {
   switch (tool) {
     case 'github-actions':
@@ -40,7 +43,6 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
       uses: actions/setup-node@v4
       with:
         node-version: 20
-        cache: 'npm'
 
     - name: Install dependencies
       run: npm install
@@ -52,7 +54,7 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
       run: npx playwright test
       env:
         CI: true
-        BASE_URL: \${{ secrets.APP_BASE_URL || '${ir.baseUrl || 'https://app.example.com'}' }}
+        BASE_URL: \${{ secrets.APP_BASE_URL || ${yamlString(ir.baseUrl || 'https://app.example.com')} }}
 
     - name: Upload Playwright Test Report Artifact
       uses: actions/upload-artifact@v4
@@ -80,9 +82,9 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
       run: playwright install --with-deps chromium
 
     - name: Run PyTest Playwright Suite
-      run: pytest --junitxml=results/junit.xml tests/
+      run: mkdir -p results && pytest --junitxml=results/junit.xml tests/
       env:
-        BASE_URL: '${ir.baseUrl || 'https://app.example.com'}'
+        BASE_URL: ${yamlString(ir.baseUrl || 'https://app.example.com')}
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
@@ -105,9 +107,9 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
       uses: browser-actions/setup-chrome@v1
 
     - name: Run Maven TestNG Automation Suite
-      run: mvn clean test -DsuiteXmlFile=testng.xml
+      run: mvn clean test
       env:
-        APP_URL: '${ir.baseUrl || 'https://app.example.com'}'
+        APP_URL: ${yamlString(ir.baseUrl || 'https://app.example.com')}
 
     - name: Publish TestNG Surefire Report
       uses: actions/upload-artifact@v4
@@ -134,7 +136,9 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
         pip install selenium pytest webdriver-manager
 
     - name: Execute Selenium PyTest Suite
-      run: pytest tests/ --junitxml=results/selenium-junit.xml
+      run: mkdir -p results && pytest tests/ --junitxml=results/selenium-junit.xml
+      env:
+        APP_URL: ${yamlString(ir.baseUrl || 'https://app.example.com')}
 
     - name: Upload Test Artifacts
       uses: actions/upload-artifact@v4
@@ -156,7 +160,7 @@ on:
       sprintTag:
         description: 'Target Sprint execution tag'
         required: false
-        default: '${ir.sprint || 'Sprint 24'}'
+        default: ${yamlString(ir.sprint || 'Sprint 24')}
 
 jobs:
   test-automation:
@@ -182,39 +186,40 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
   const isPlaywrightPython = framework === 'playwright-python';
   const isSeleniumJava = framework === 'selenium-java';
 
-  let testStageCommand = 'npx playwright test';
+  let testStageCommand = 'BASE_URL="$TARGET_URL" npx playwright test';
   let prepCommands = `sh 'npm install'\n                sh 'npx playwright install --with-deps'`;
-  let postAction = `publishHTML([
-                allowMissing: false,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'playwright-report',
-                reportFiles: 'index.html',
-                reportName: 'Playwright E2E HTML Report'
-            ])`;
+  let postAction = `archiveArtifacts artifacts: 'playwright-report/**, test-results/**', allowEmptyArchive: true`;
 
   if (isPlaywrightPython) {
     prepCommands = `sh 'python3 -m venv venv'\n                sh '. venv/bin/activate && pip install -r requirements.txt && playwright install --with-deps'`;
-    testStageCommand = '. venv/bin/activate && pytest --junitxml=reports/test-results.xml tests/';
+    testStageCommand = '. venv/bin/activate && mkdir -p reports && BASE_URL="$TARGET_URL" pytest --junitxml=reports/test-results.xml tests/';
     postAction = `junit 'reports/test-results.xml'`;
   } else if (isSeleniumJava) {
-    prepCommands = `sh 'mvn clean compile'`;
-    testStageCommand = `mvn test -DsuiteXmlFile=testng.xml -Dtest.target.url="${ir.baseUrl}"`;
+    prepCommands = `sh 'apt-get update && apt-get install -y chromium chromium-driver'
+                sh 'mvn -q -DskipTests compile'`;
+    testStageCommand = 'mvn clean test -Dapp.url="$TARGET_URL"';
     postAction = `junit 'target/surefire-reports/*.xml'`;
+  } else if (framework === 'selenium-python') {
+    prepCommands = `sh 'apt-get update && apt-get install -y chromium chromium-driver'
+                sh 'python3 -m venv venv'
+                sh '. venv/bin/activate && pip install -r requirements.txt'`;
+    testStageCommand = '. venv/bin/activate && mkdir -p reports && APP_URL="$TARGET_URL" pytest --junitxml=reports/test-results.xml tests/';
+    postAction = `junit 'reports/test-results.xml'`;
   }
 
   const jenkinsfile = `pipeline {
     agent {
         docker {
-            image 'mcr.microsoft.com/playwright:v1.44.0-jammy'
+            image '${framework === 'selenium-java' ? 'maven:3.9.9-eclipse-temurin-17' : framework === 'playwright-python' ? 'mcr.microsoft.com/playwright/python:v1.63.0-noble' : framework === 'selenium-python' ? 'python:3.11-bookworm' : 'mcr.microsoft.com/playwright:v1.63.0-noble'}'
             args '-u root:root --ipc=host'
         }
     }
 
     environment {
         CI = 'true'
-        TARGET_URL = '${ir.baseUrl || 'https://app.example.com'}'
-        SPRINT_VERSION = '${ir.sprint || 'Sprint 24'}'
+        TARGET_URL = ${groovyString(ir.baseUrl || 'https://app.example.com')}
+        SPRINT_VERSION = ${groovyString(ir.sprint || 'Sprint 24')}
+        CHROME_BIN = '/usr/bin/chromium'
     }
 
     options {
@@ -225,7 +230,8 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
     stages {
         stage('Checkout & Environment') {
             steps {
-                echo "Running AutoTest suite for [${ir.testCaseId}] on branch: \${env.BRANCH_NAME}"
+                echo ${groovyString(`Running AutoTest suite for ${ir.testCaseId} on branch:`)}
+                echo "Branch: \${env.BRANCH_NAME}"
                 checkout scm
             }
         }
@@ -271,21 +277,35 @@ function generateGitLabCi(framework: FrameworkType, ir: TestIR): CiPipelineConfi
 
   if (framework === 'playwright-python') {
     beforeScript = `  - pip install -r requirements.txt\n  - playwright install --with-deps`;
-    script = 'pytest --junitxml=report.xml tests/';
+    script = 'mkdir -p results && BASE_URL="$BASE_URL" pytest --junitxml=results/report.xml tests/';
   } else if (framework === 'selenium-java') {
-    beforeScript = `  - apt-get update && apt-get install -y google-chrome-stable`;
-    script = 'mvn test';
+    beforeScript = `  - apt-get update && apt-get install -y chromium chromium-driver`;
+    script = 'mvn clean test';
+  } else if (framework === 'playwright-js') {
+    beforeScript = `  - npm install\n  - npx playwright install --with-deps chromium`;
+  } else if (framework === 'selenium-python') {
+    beforeScript = `  - apt-get update && apt-get install -y chromium chromium-driver\n  - pip install -r requirements.txt`;
+    script = 'mkdir -p results && APP_URL="$APP_URL" pytest tests/ --junitxml=results/selenium-junit.xml';
   }
 
-  const gitlabYaml = `image: node:20-bullseye
+  const ciImage = framework === 'playwright-python'
+    ? 'mcr.microsoft.com/playwright/python:v1.63.0-noble'
+    : framework === 'selenium-java'
+      ? 'maven:3.9.9-eclipse-temurin-17'
+      : framework === 'selenium-python'
+        ? 'python:3.11-bookworm'
+        : 'node:20-bullseye';
+  const gitlabYaml = `image: ${ciImage}
 
 stages:
   - test
 
 variables:
   CI: "true"
-  BASE_URL: "${ir.baseUrl || 'https://app.example.com'}"
-  TEST_SPRINT: "${ir.sprint || 'Sprint 24'}"
+  BASE_URL: ${yamlString(ir.baseUrl || 'https://app.example.com')}
+  APP_URL: ${yamlString(ir.baseUrl || 'https://app.example.com')}
+  TEST_SPRINT: ${yamlString(ir.sprint || 'Sprint 24')}
+  CHROME_BIN: /usr/bin/chromium
 
 run_e2e_tests:
   stage: test

@@ -163,6 +163,13 @@ Return ONLY valid JSON matching:
 
     res.json({ success: true, testIR: parsedIR });
   } catch (error: any) {
+    if (imageBase64) {
+      console.warn('Screenshot analysis is unavailable; returning an actionable error instead of silently ignoring the image.');
+      return res.status(503).json({
+        success: false,
+        error: 'Screenshot analysis needs the configured AI service. Ask your administrator to check GEMINI_API_KEY and try again.'
+      });
+    }
     console.warn('Gemini 503 / API unavailable; activating deterministic resilient fallback IR builder.');
     // Graceful fallback to guarantee user gets a complete test suite even when Google Cloud experiences temporary 503
     const fallbackIR = buildFallbackIR(

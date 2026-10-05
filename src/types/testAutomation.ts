@@ -80,7 +80,7 @@ export interface SprintChangeDiff {
 export interface GeneratedCodeFile {
   filename: string;
   filepath: string;
-  language: 'typescript' | 'javascript' | 'python' | 'java';
+  language: 'typescript' | 'javascript' | 'python' | 'java' | 'json' | 'text';
   framework: FrameworkType;
   code: string;
   description: string;

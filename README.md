@@ -11,6 +11,8 @@ AutoTest Architect turns QA specifications, screenshots, video frames, and DOM d
 - Review run instructions, active-test analytics, and webhook configuration.
 - Export generated test suites. The full application source ZIP action and endpoint have been removed.
 
+For step-by-step instructions for each workflow, see the [AutoTest Architect User Manual](USER_MANUAL.md).
+
 ## Run locally
 
 Requirements: Node.js 20.19+ (or 22.12+) and npm.

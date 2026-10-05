@@ -3,6 +3,19 @@ import { TestIR, TestIRStep } from '../types/testAutomation';
 const isNavigationInstruction = (text: string) =>
   /^(?:navigate\b|go to\b|launch\b)|^open\b.*(?:https?:\/\/|\/[a-zA-Z0-9_\-/]*|\b(?:page|site|website|application|app)\b)/i.test(text);
 
+function quotedValue(text: string) {
+  return text.match(/["']([^"']+)["']/)?.[1] || '';
+}
+
+function makeTarget(semantic: string, selector: string, role?: string) {
+  return {
+    semantic,
+    ...(role ? { role } : {}),
+    recommendedLocator: selector,
+    locators: [{ strategy: 'css' as const, selector, confidence: 0.6, description: 'Fallback selector; verify against the target DOM.' }]
+  };
+}
+
 export function buildFallbackIR(
   featureName: string,
   baseUrl: string,
@@ -50,7 +63,44 @@ export function buildFallbackIR(
         description: clean,
         value: url
       });
-    } else if (/fill|enter|type|input/i.test(lower)) {
+    } else if (/\b(assert|verify|confirm|ensure)\b|\bcheck that\b|\bshould be visible\b|\bshould contain\b/i.test(lower)) {
+      const expectedText = quotedValue(clean);
+      const urlMatch = clean.match(/https?:\/\/[^\s"']+|\/[a-zA-Z0-9_\-/]*/);
+      const isUrl = /url|address bar|redirect/i.test(lower) && Boolean(urlMatch);
+      if (isUrl) {
+        steps.push({
+          id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'assert_url', description: clean,
+          value: urlMatch?.[0], expectedResult: expectedText || undefined
+        });
+      } else {
+        const expected = expectedText || clean.replace(/^(?:verify|assert|confirm|ensure|check that)\s*/i, '').replace(/\s+(?:is|should be)\s+(?:visible|displayed).*$/i, '').trim();
+        steps.push({
+          id: `step-${stepIndex}`, stepNumber: stepIndex++, action: expectedText ? 'assert_text' : 'assert_visible',
+          description: clean,
+          ...(expected ? { expectedResult: expected } : {}),
+          target: makeTarget(expected || 'Confirmation / status message', expected ? `text=${JSON.stringify(expected)}` : '[role="status"], [role="alert"]', 'status')
+        });
+      }
+    } else if (/\b(uncheck|deselect)\b/i.test(lower)) {
+      const label = quotedValue(clean) || clean.replace(/\b(uncheck|deselect)\b/i, '').replace(/\b(checkbox|option|toggle)\b/ig, '').trim();
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'uncheck', description: clean,
+        target: makeTarget(`${label || 'Option'} checkbox`, label ? `input[type="checkbox"][aria-label=${JSON.stringify(label)}]` : 'input[type="checkbox"]', 'checkbox')
+      });
+    } else if (/\b(check|select)\b.*\b(checkbox|option|toggle)\b/i.test(lower)) {
+      const label = quotedValue(clean) || clean.replace(/\b(check|select)\b/i, '').replace(/\b(checkbox|option|toggle)\b/ig, '').trim();
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'check', description: clean,
+        target: makeTarget(`${label || 'Option'} checkbox`, label ? `input[type="checkbox"][aria-label=${JSON.stringify(label)}]` : 'input[type="checkbox"]', 'checkbox')
+      });
+    } else if (/\bpress\b/i.test(lower)) {
+      const key = quotedValue(clean) || clean.replace(/\bpress\b/i, '').trim() || 'Enter';
+      const targetName = clean.match(/(?:on|in)\s+(?:the\s+)?(.+)$/i)?.[1] || 'Focused page';
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'press', description: clean, value: key,
+        target: makeTarget(targetName, 'body', 'document')
+      });
+    } else if (/\b(fill|enter|type|input)\b/i.test(lower)) {
       // e.g. "Fill Shipping Address: '100 Market St, San Francisco, CA'"
       // or "Enter username"
       const valMatch = clean.match(/["']([^"']+)["']/);
@@ -93,7 +143,27 @@ export function buildFallbackIR(
           ]
         }
       });
-    } else if (/click|press|select|tap/i.test(lower)) {
+    } else if (/\bselect\b/i.test(lower)) {
+      const option = quotedValue(clean) || clean.replace(/\bselect\b/i, '').trim();
+      const field = clean.match(/(?:in|from|for)\s+(?:the\s+)?["']?(.+?)(?:\s+(?:dropdown|list|menu))?["']?$/i)?.[1] || 'Selection field';
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'select', description: clean, value: option,
+        target: makeTarget(field, `select[aria-label=${JSON.stringify(field)}]`, 'combobox')
+      });
+    } else if (/\bhover\b/i.test(lower)) {
+      const label = quotedValue(clean) || clean.replace(/\bhover\s+(?:over\s+)?/i, '').trim();
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'hover', description: clean,
+        target: makeTarget(label || 'Target element', label ? `text=${JSON.stringify(label)}` : 'body')
+      });
+    } else if (/\bwait\b/i.test(lower)) {
+      const label = quotedValue(clean) || '';
+      steps.push({
+        id: `step-${stepIndex}`, stepNumber: stepIndex++, action: 'wait_for', description: clean,
+        ...(label ? { value: label } : {}),
+        target: makeTarget(label || 'Page content', label ? `text=${JSON.stringify(label)}` : 'body')
+      });
+    } else if (/\b(click|tap)\b/i.test(lower)) {
       // e.g. Click "Add to Cart" button (data-testid: add-to-cart)
       const testidMatch = clean.match(/data-testid[:=]\s*["']?([a-zA-Z0-9_\-]+)["']?/i);
       const quoted = clean.match(/["']([^"']+)["']/);
@@ -115,26 +185,6 @@ export function buildFallbackIR(
           locators: [
             { strategy: 'role', selector: `getByRole('button', { name: '${btnName}' })`, confidence: 0.96 },
             { strategy: 'css', selector: recLocator, confidence: 0.92 }
-          ]
-        }
-      });
-    } else if (/verify|assert|check|confirm|ensure/i.test(lower)) {
-      const quoted = clean.match(/["']([^"']+)["']/);
-      const expectedText = quoted ? quoted[1] : 'confirmed';
-
-      steps.push({
-        id: `step-${stepIndex}`,
-        stepNumber: stepIndex++,
-        action: 'assert_visible',
-        description: clean,
-        expectedResult: expectedText,
-        target: {
-          semantic: 'Confirmation / Status banner',
-          role: 'status',
-          recommendedLocator: `text="${expectedText}"`,
-          locators: [
-            { strategy: 'role', selector: `getByText('${expectedText}')`, confidence: 0.97 },
-            { strategy: 'css', selector: `[data-testid*='confirm'], [data-testid*='status']`, confidence: 0.88 }
           ]
         }
       });

@@ -1,8 +1,39 @@
 import express, { Request, Response } from 'express';
+import multer from 'multer';
+import type { File as GeminiFile } from '@google/genai';
+import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
 import { getGeminiClient } from './geminiClient.js';
 import { buildFallbackIR } from '../src/utils/fallbackIR.js';
 
 export const aiRouter = express.Router();
+
+const supportedVideoMimeTypes = new Set([
+  'video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv',
+  'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp'
+]);
+const videoMimeByExtension: Record<string, string> = {
+  '.mp4': 'video/mp4', '.mpeg': 'video/mpeg', '.mov': 'video/mov',
+  '.avi': 'video/avi', '.flv': 'video/x-flv', '.mpg': 'video/mpg',
+  '.webm': 'video/webm', '.wmv': 'video/wmv', '.3gp': 'video/3gpp'
+};
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, _file, callback) => callback(null, `autotest-video-${randomUUID()}`)
+  }),
+  limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 6, fieldSize: 512 * 1024 }
+});
+
+function receiveVideo(req: Request, res: Response, next: express.NextFunction) {
+  videoUpload.single('video')(req, res, error => {
+    if (!error) return next();
+    const tooLarge = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE';
+    res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'Video exceeds the 100 MB upload limit.' : 'Could not read the uploaded video. Choose a supported video file and try again.' });
+  });
+}
 
 // Helper to sanitize JSON response from Gemini
 function parseJsonFromText(rawText: string) {
@@ -143,6 +174,104 @@ Return ONLY valid JSON matching:
       testIR: fallbackIR,
       notice: 'Synthesized using AutoTest resilient parser (upstream AI is temporarily at high capacity).' 
     });
+  }
+});
+
+/** Analyze an uploaded walkthrough, including its visual actions and spoken instructions. */
+aiRouter.post('/analyze-video', receiveVideo, async (req: Request, res: Response) => {
+  const video = req.file;
+  if (!video) return res.status(400).json({ error: 'Choose a video file to analyze.' });
+
+  let uploadedFile: GeminiFile | undefined;
+  try {
+    const extension = path.extname(video.originalname).toLowerCase();
+    const mimeType = videoMimeByExtension[extension] || (video.mimetype === 'video/quicktime' ? 'video/mov' : video.mimetype);
+    if (!supportedVideoMimeTypes.has(mimeType)) {
+      return res.status(415).json({ error: 'Unsupported video format. Use MP4, MOV, WebM, AVI, MPEG, WMV, FLV, or 3GP.' });
+    }
+    const baseUrl = String(req.body.baseUrl || '').trim();
+    try {
+      const parsedUrl = new URL(baseUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error();
+    } catch {
+      return res.status(400).json({ error: 'Enter a valid target application URL beginning with https:// or http://.' });
+    }
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: 'Video analysis requires GEMINI_API_KEY. Add it to the server environment and restart the app.' });
+    }
+    const featureName = String(req.body.featureName || '').trim().slice(0, 120) || 'Application workflow';
+    const instructions = String(req.body.instructions || '').trim().slice(0, 4000);
+    const append = req.body.appendToExisting === 'true';
+    let existingContext = '';
+    if (append && req.body.currentTestIR) {
+      if (String(req.body.currentTestIR).length > 300_000) return res.status(400).json({ error: 'Existing test suite is too large to include with this video.' });
+      try {
+        const current = JSON.parse(req.body.currentTestIR);
+        const steps = Array.isArray(current.steps) ? current.steps.slice(0, 100) : [];
+        existingContext = `Existing suite context (preserve it; return only actions newly shown in this clip):\n${JSON.stringify({ title: current.title, testCaseId: current.testCaseId, steps }, null, 2)}`;
+      } catch {
+        return res.status(400).json({ error: 'Could not read the existing test suite context.' });
+      }
+    }
+
+    const ai = getGeminiClient();
+    uploadedFile = await ai.files.upload({
+      file: video.path,
+      config: { mimeType, displayName: video.originalname.slice(0, 255) }
+    });
+    if (!uploadedFile.name || !uploadedFile.uri || !uploadedFile.mimeType) throw new Error('The video upload did not return a usable file reference.');
+
+    let fileState = uploadedFile;
+    for (let attempt = 0; fileState.state === 'PROCESSING' && attempt < 60; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      fileState = await ai.files.get({ name: uploadedFile!.name! });
+    }
+    if (fileState.state === 'FAILED') throw new Error('Gemini could not process this video. Try exporting it as MP4 or using a shorter clip.');
+    if (fileState.state !== 'ACTIVE') throw new Error('Video processing took too long. Try a shorter clip.');
+
+    const prompt = `You analyze recorded software UI walkthroughs to create runnable UI automation test steps.
+Analyze BOTH the video frames and its audio track. Listen for spoken test instructions, expected outcomes, labels, and navigation guidance. Align what is said with the visible interactions and include the complete chronological flow.
+
+Target feature: ${featureName}
+Target application base URL: ${baseUrl}
+${instructions ? `Additional user guidance:\n${instructions}\n` : ''}
+${existingContext}
+
+Return a canonical Test IR as valid JSON only, with fields: testCaseId, title, description, feature, sprint, priority, baseUrl, steps. Each step must contain id, stepNumber, action, description, optional target {semantic, role, recommendedLocator, locators}, optional value, expectedResult, and timestamp (MM:SS or HH:MM:SS from the clip).
+Use only supported actions: navigate, click, fill, select, check, uncheck, press, hover, wait_for, assert_visible, assert_text, assert_url. Use visible labels and accessible roles for locator suggestions. The video does not reveal the page DOM, so do not invent data-testid values or claim locator certainty. Use an observed URL when visible, otherwise use the supplied target base URL. Do not guess outcomes that are not visible or spoken. Replace any password, access token, card number, or other secret spoken or shown in the recording with a safe placeholder such as <TEST_PASSWORD>; never reproduce the actual secret. If extending an existing suite, return only the new actions from this clip and do not repeat existing steps. Include an initial navigation step only for a new suite when the clip clearly shows one.
+
+Use testCaseId from the existing suite when extending it, otherwise make a concise ID. Set baseUrl exactly to the supplied URL. Provide a concise description of the recorded scenario. Return no markdown fences or commentary.`;
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: { parts: [
+        { fileData: { fileUri: uploadedFile.uri, mimeType: uploadedFile.mimeType } },
+        { text: prompt }
+      ] },
+      config: { responseMimeType: 'application/json', temperature: 0.1 }
+    });
+    const testIR = parseJsonFromText(response.text || '{}');
+    if (!Array.isArray(testIR.steps) || testIR.steps.length === 0) {
+      return res.status(422).json({ error: 'No test actions could be identified. Try a clearer recording with visible interactions or spoken instructions.' });
+    }
+    if (testIR.steps.length > 100) testIR.steps = testIR.steps.slice(0, 100);
+    testIR.id = `ir-${Date.now()}`;
+    testIR.baseUrl = baseUrl;
+    testIR.feature = featureName;
+    testIR.steps = testIR.steps.map((step: any, index: number) => ({
+      ...step,
+      id: typeof step.id === 'string' ? step.id : `video-step-${index + 1}`,
+      stepNumber: index + 1
+    }));
+    return res.json({ success: true, testIR, source: 'video-and-audio' });
+  } catch (error: any) {
+    console.error('Video analysis failed:', error?.message || 'Unknown video analysis error');
+    return res.status(502).json({ error: error instanceof Error ? error.message : 'Could not analyze the uploaded video.' });
+  } finally {
+    if (video.path) await unlink(video.path).catch(() => undefined);
+    if (uploadedFile?.name) {
+      const ai = getGeminiClient();
+      await ai.files.delete({ name: uploadedFile.name }).catch(error => console.warn('Could not remove temporary Gemini video file:', error?.message || 'unknown error'));
+    }
   }
 });
 

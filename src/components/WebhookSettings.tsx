@@ -19,7 +19,6 @@ export interface WebhookConfig {
   name: string;
   type: 'slack' | 'teams' | 'custom';
   url: string;
-  channel?: string;
   notifyOnPass: boolean;
   notifyOnFail: boolean;
   notifyOnSelfHeal: boolean;
@@ -94,7 +93,6 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
       name: 'New Alert Endpoint',
       type: 'slack',
       url: '',
-      channel: '#qa-status',
       notifyOnPass: true,
       notifyOnFail: true,
       notifyOnSelfHeal: true,
@@ -266,18 +264,6 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
                 />
               </div>
 
-              <div>
-                <label className="block text-2xs font-semibold uppercase text-slate-500 mb-1">
-                  Channel / Room Name (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={hook.channel || ''}
-                  onChange={(e) => handleUpdate(hook.id, { channel: e.target.value })}
-                  placeholder="#qa-alerts"
-                  className="w-full text-xs px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
             </div>
 
             {/* Notification Triggers */}

@@ -11,11 +11,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.APP_API_TOKEN || process.env.APP_API_TOKEN.length < 32) {
+      throw new Error('Set APP_API_TOKEN to a random value of at least 32 characters before starting in production.');
+    }
+    if (!process.env.WEBHOOK_ENCRYPTION_KEY || !/^[a-f0-9]{64}$/i.test(process.env.WEBHOOK_ENCRYPTION_KEY)) {
+      throw new Error('Set WEBHOOK_ENCRYPTION_KEY to a securely generated 64-character hexadecimal key before starting in production.');
+    }
+  }
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    if (process.env.NODE_ENV === 'production') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
 
   // API Routes
   app.use('/api', aiRouter);
@@ -25,6 +42,9 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
+      webhookApiConfigured: !!process.env.APP_API_TOKEN,
+      webhookEncryptionConfigured: true,
+      webhookAuthMode: process.env.APP_API_TOKEN ? 'bearer-token' : 'development-open',
       hasApiKey: !!process.env.GEMINI_API_KEY,
       timestamp: new Date().toISOString()
     });

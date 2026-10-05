@@ -42,6 +42,10 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState<string>('');
   const [videoNotes, setVideoNotes] = useState('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState('');
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [videoProgress, setVideoProgress] = useState('');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -51,6 +55,13 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       setTestCaseText('');
     }
   }, [canAppendToExisting]);
+
+  useEffect(() => {
+    if (!videoFile) { setVideoPreviewUrl(''); return; }
+    const url = URL.createObjectURL(videoFile);
+    setVideoPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoFile]);
 
   // Initialize Speech Recognition & Synthesis APIs
   useEffect(() => {
@@ -176,6 +187,18 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
     }
   };
 
+  const handleVideoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      setErrorMessage('Choose a video smaller than 100 MB.');
+      event.target.value = '';
+      return;
+    }
+    setErrorMessage(null);
+    setVideoFile(file);
+  };
+
   const handleGenerateIR = async () => {
     if (!baseUrl.trim()) {
       setErrorMessage('Enter the target application base URL before generating tests.');
@@ -190,7 +213,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
     }
     const hasActiveInput = activeTab === 'sheet' ? !!testCaseText.trim()
       : activeTab === 'screenshot' ? !!screenshotData
-      : activeTab === 'video' ? !!videoNotes.trim()
+      : activeTab === 'video' ? !!videoFile
       : !!domSnippet.trim();
     if (!hasActiveInput) {
       setErrorMessage(activeTab === 'screenshot' ? 'Upload a screenshot to continue.' : 'Add input details to continue.');
@@ -204,9 +227,26 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
     setErrorMessage(null);
 
     try {
+      if (activeTab === 'video') {
+        const form = new FormData();
+        form.set('video', videoFile!);
+        form.set('featureName', featureName.trim());
+        form.set('baseUrl', baseUrl.trim());
+        form.set('instructions', videoNotes.trim());
+        form.set('appendToExisting', String(appendToExisting));
+        if (appendToExisting) form.set('currentTestIR', JSON.stringify(currentTestIR));
+        setVideoProgress('Uploading video and analyzing its frames and audio…');
+        const response = await apiFetch('/api/analyze-video', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Could not analyze the video.');
+        onIRGenerated({ ...data.testIR, baseUrl: baseUrl.trim(), feature: featureName.trim() || data.testIR.feature }, appendToExisting, false);
+        setVideoFile(null);
+        setVideoNotes('');
+        if (videoInputRef.current) videoInputRef.current.value = '';
+        return;
+      }
       let textContent = '';
       if (activeTab === 'sheet') textContent = testCaseText;
-      else if (activeTab === 'video') textContent = videoNotes;
       else if (activeTab === 'dom') textContent = `Synthesize test case from DOM structure:\n${domSnippet}`;
       else textContent = testCaseText || 'Synthesize test from uploaded UI mockup';
 
@@ -237,6 +277,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       console.error(err);
       setErrorMessage(err.message || 'An unexpected error occurred while analyzing the input.');
     } finally {
+      setVideoProgress('');
       setIsLoading(false);
     }
   };
@@ -478,21 +519,35 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
 
         {activeTab === 'video' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-slate-700">
-                Keyframe / Timeline Action Log (OCR & Interaction Sequence)
-              </label>
-              <span className="text-2xs text-slate-400">Time-indexed step breakdown</span>
+            <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 p-6 text-center">
+              {videoFile ? (
+                <div className="space-y-3">
+                  {videoPreviewUrl && <video className="mx-auto max-h-64 max-w-full rounded-lg bg-black" controls src={videoPreviewUrl} />}
+                  <div className="text-sm font-medium text-slate-800">{videoFile.name}</div>
+                  <div className="text-xs text-slate-500">{(videoFile.size / (1024 * 1024)).toFixed(1)} MB · video and spoken audio will be analyzed</div>
+                  <button type="button" onClick={() => { setVideoFile(null); if (videoInputRef.current) videoInputRef.current.value = ''; }} className="text-xs font-medium text-rose-700 hover:underline">Remove video</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Video className="mx-auto h-10 w-10 text-indigo-600" />
+                  <div><p className="text-sm font-semibold text-slate-800">Upload a test walkthrough</p><p className="mt-1 text-xs text-slate-500">The AI reads visible interactions and listens for spoken test instructions.</p></div>
+                  <button type="button" onClick={() => videoInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><Upload className="h-4 w-4" />Choose video</button>
+                  <input ref={videoInputRef} type="file" accept="video/mp4,video/mpeg,video/mov,video/avi,video/x-flv,video/mpg,video/webm,video/wmv,video/3gpp,.mp4,.mpeg,.mov,.avi,.flv,.mpg,.webm,.wmv,.3gp" onChange={handleVideoSelected} className="hidden" />
+                  <p className="text-2xs text-slate-400">MP4, MOV, WebM, AVI, MPEG, WMV or 3GP · maximum 100 MB</p>
+                </div>
+              )}
             </div>
+            <label htmlFor="video-instructions" className="block text-xs font-medium text-slate-700">Additional instructions (optional)</label>
             <textarea
+              id="video-instructions"
               rows={8}
               value={videoNotes}
               onChange={(e) => setVideoNotes(e.target.value)}
+              placeholder="Optional: tell the analyzer what scenario to focus on or clarify any actions spoken in the recording."
               className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
             />
-            <p className="text-2xs text-slate-500">
-              The AI parses timestamp intervals, detected gestures, click actions, and on-screen transitions into canonical Test IR steps.
-            </p>
+            <p className="text-2xs text-slate-500">The recording is sent to Gemini for analysis. Avoid recordings containing real passwords, payment details, or private customer data.</p>
+            {videoProgress && <p role="status" aria-live="polite" className="text-sm font-medium text-indigo-700">{videoProgress}</p>}
           </div>
         )}
 

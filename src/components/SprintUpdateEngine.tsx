@@ -18,37 +18,19 @@ interface SprintUpdateEngineProps {
   onApplySprintPatch: (updatedIR: TestIR) => void;
   isLoading: boolean;
   setIsLoading: (val: boolean) => void;
+  apiFetch: typeof fetch;
 }
 
 export const SprintUpdateEngine: React.FC<SprintUpdateEngineProps> = ({
   currentTestIR,
   onApplySprintPatch,
   isLoading,
-  setIsLoading
+  setIsLoading,
+  apiFetch
 }) => {
-  const [sprintNumber, setSprintNumber] = useState('Sprint 25');
-  const [sprintNotes, setSprintNotes] = useState(
-`Sprint 25 UI Changes:
-1. Product Design updated the main CTA button:
-   - Text changed from "Sign In" / "Login" to "Continue with SSO"
-   - Button locator changed from data-testid="login-submit-btn" to data-testid="sso-continue-button"
-2. Added required 2-step verification checkbox "Remember this device for 30 days" (data-testid="remember-device")
-3. Heading changed from "Welcome back" to "Team Portal Dashboard"`
-  );
-
-  const [newDomSnippet, setNewDomSnippet] = useState(
-`<div class="login-box-v2">
-  <input data-testid="username-input" name="user" />
-  <input data-testid="password-input" type="password" />
-  <div class="checkbox-row">
-    <input type="checkbox" id="remember-device" data-testid="remember-device" />
-    <label for="remember-device">Remember this device for 30 days</label>
-  </div>
-  <button data-testid="sso-continue-button" class="btn btn-primary">
-    Continue with SSO
-  </button>
-</div>`
-  );
+  const [sprintNumber, setSprintNumber] = useState('');
+  const [sprintNotes, setSprintNotes] = useState('');
+  const [newDomSnippet, setNewDomSnippet] = useState('');
 
   const [detectedDiffs, setDetectedDiffs] = useState<SprintChangeDiff[] | null>(null);
   const [diffSummary, setDiffSummary] = useState<string>('');
@@ -57,12 +39,20 @@ export const SprintUpdateEngine: React.FC<SprintUpdateEngineProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleDetectChanges = async () => {
+    if (!currentTestIR.steps.length) {
+      setErrorMessage('Generate a test suite before comparing sprint changes.');
+      return;
+    }
+    if (!sprintNumber.trim() || (!sprintNotes.trim() && !newDomSnippet.trim())) {
+      setErrorMessage('Enter a target sprint and at least one change note or updated DOM snippet.');
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
     setApplied(false);
 
     try {
-      const response = await fetch('/api/detect-sprint-diff', {
+      const response = await apiFetch('/api/detect-sprint-diff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

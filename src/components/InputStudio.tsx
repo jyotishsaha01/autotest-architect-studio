@@ -16,7 +16,6 @@ import {
   VolumeX
 } from 'lucide-react';
 import { TestIR } from '../types/testAutomation';
-import { PRESET_TEST_SHEETS } from '../data/sampleData';
 
 interface InputStudioProps {
   onIRGenerated: (ir: TestIR, appendToExisting: boolean, explicitNavigation: boolean) => void;
@@ -24,47 +23,25 @@ interface InputStudioProps {
   setIsLoading: (val: boolean) => void;
   currentTestIR: TestIR;
   canAppendToExisting: boolean;
+  apiFetch: typeof fetch;
 }
 
-export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoading, setIsLoading, currentTestIR, canAppendToExisting }) => {
+export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoading, setIsLoading, currentTestIR, canAppendToExisting, apiFetch }) => {
   const [activeTab, setActiveTab] = useState<'sheet' | 'screenshot' | 'video' | 'dom'>('sheet');
-  const [testCaseText, setTestCaseText] = useState(PRESET_TEST_SHEETS[0].stepsText);
-  const [featureName, setFeatureName] = useState(PRESET_TEST_SHEETS[0].feature);
-  const [baseUrl, setBaseUrl] = useState(PRESET_TEST_SHEETS[0].baseUrl);
+  const [testCaseText, setTestCaseText] = useState('');
+  const [featureName, setFeatureName] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [appendToExisting, setAppendToExisting] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [ttsSupported, setTtsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const [domSnippet, setDomSnippet] = useState(
-`<form id="checkout-form" class="space-y-4">
-  <div class="field-wrap">
-    <label for="shipping-address">Shipping Address</label>
-    <input id="shipping-address" name="address" data-testid="address-input" placeholder="Street Address" />
-  </div>
-  <div class="field-wrap">
-    <label for="cc-num">Card Number</label>
-    <input id="cc-num" name="card_number" data-testid="cc-input" placeholder="XXXX XXXX XXXX XXXX" />
-  </div>
-  <button type="submit" data-testid="submit-order-btn" class="btn btn-primary">
-    Place Order
-  </button>
-</form>`
-  );
+  const [domSnippet, setDomSnippet] = useState('');
 
   const [screenshotData, setScreenshotData] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState<string>('');
-  const [videoNotes, setVideoNotes] = useState(
-`Walkthrough recorded at 60fps (checkout_flow_v1.mp4):
-00:00.0 - Browser opens to /products
-00:02.1 - User clicks first item card 'Wireless Headphones'
-00:04.5 - User clicks 'Add to Cart' button
-00:06.8 - Cart drawer slides in from right; user clicks 'Proceed to Checkout'
-00:10.2 - User inputs street address
-00:13.4 - User enters payment info and clicks 'Place Order'
-00:16.0 - Confirmation toast shows 'Order # confirmed!'`
-  );
+  const [videoNotes, setVideoNotes] = useState('');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -200,6 +177,25 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
   };
 
   const handleGenerateIR = async () => {
+    if (!baseUrl.trim()) {
+      setErrorMessage('Enter the target application base URL before generating tests.');
+      return;
+    }
+    try {
+      const target = new URL(baseUrl.trim());
+      if (!['http:', 'https:'].includes(target.protocol)) throw new Error();
+    } catch {
+      setErrorMessage('Enter a valid target URL beginning with https:// or http://.');
+      return;
+    }
+    const hasActiveInput = activeTab === 'sheet' ? !!testCaseText.trim()
+      : activeTab === 'screenshot' ? !!screenshotData
+      : activeTab === 'video' ? !!videoNotes.trim()
+      : !!domSnippet.trim();
+    if (!hasActiveInput) {
+      setErrorMessage(activeTab === 'screenshot' ? 'Upload a screenshot to continue.' : 'Add input details to continue.');
+      return;
+    }
     if (appendToExisting && activeTab === 'sheet' && !testCaseText.trim()) {
       setErrorMessage('Enter the new test steps you want to add to the existing suite.');
       return;
@@ -214,7 +210,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       else if (activeTab === 'dom') textContent = `Synthesize test case from DOM structure:\n${domSnippet}`;
       else textContent = testCaseText || 'Synthesize test from uploaded UI mockup';
 
-      const response = await fetch('/api/analyze-input', {
+      const response = await apiFetch('/api/analyze-input', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -234,7 +230,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
       }
 
       const explicitNavigation = /(?:^|\n)\s*(?:step\s*\d*[:.)-]?\s*)?(?:navigate|go to|open|visit|launch)\b/im.test(textContent);
-      onIRGenerated(data.testIR, appendToExisting, explicitNavigation);
+      onIRGenerated({ ...data.testIR, baseUrl: baseUrl.trim(), feature: featureName.trim() || data.testIR.feature }, appendToExisting, explicitNavigation);
       setTestCaseText('');
       setAppendToExisting(true);
     } catch (err: any) {

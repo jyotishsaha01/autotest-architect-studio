@@ -27,26 +27,19 @@ export interface WebhookConfig {
 
 interface WebhookSettingsProps {
   currentTestIR: TestIR;
+  apiFetch: typeof fetch;
 }
 
-export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR }) => {
+export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR, apiFetch }) => {
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [apiToken, setApiToken] = useState('');
   const [accessError, setAccessError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ webhookId: string; success: boolean; message: string; payload?: any } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  useEffect(() => {
-    fetchWebhooks();
-  }, []);
-
-  const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, {
-    ...init,
-    headers: { ...init.headers, ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}) }
-  });
+  useEffect(() => { fetchWebhooks(); }, [apiFetch]);
 
   const fetchWebhooks = async () => {
     try {
@@ -184,16 +177,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
 
       {/* Webhook Configuration Cards */}
       <div className="p-6 space-y-6">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="webhook-api-token">Webhook API access token</label>
-          <div className="flex gap-2">
-            <input id="webhook-api-token" type="password" autoComplete="off" value={apiToken} onChange={e => setApiToken(e.target.value)} placeholder="Paste the server APP_API_TOKEN" className="min-w-0 flex-1 text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg" />
-            <button type="button" onClick={() => fetchWebhooks()} className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-medium">Connect</button>
-            {apiToken && <button type="button" onClick={() => setApiToken('')} className="px-3 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs">Clear</button>}
-          </div>
-          <p className="mt-1 text-2xs text-slate-500">The token remains in page memory until you leave or reload this page. Webhook URLs are encrypted on the server and saved to its persistent data volume.</p>
-          {accessError && <p role="alert" className="mt-2 text-xs text-rose-700">{accessError}</p>}
-        </div>
+        {accessError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">{accessError}</p>}
         {webhooks.length === 0 && (
           <div className="py-12 text-center text-slate-400">
             <MessageSquare className="w-10 h-10 mx-auto text-slate-300 mb-2 stroke-[1.5]" />

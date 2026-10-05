@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { GeneratedCodeFile, FrameworkType, TestIR } from '../types/testAutomation';
 import { exportSuiteAsZip } from '../utils/zipExporter';
+import { generateCiPipeline } from '../utils/ciGenerators';
+import { validateSuiteForExport, ValidationFinding } from '../utils/suiteValidation';
+import { ValidationDialog } from './ValidationDialog';
 import { GitHubPushModal } from './GitHubPushModal';
 
 interface CodeViewerProps {
@@ -19,30 +22,28 @@ interface CodeViewerProps {
   selectedFramework: FrameworkType;
   onFrameworkChange: (framework: FrameworkType) => void;
   currentTestIR: TestIR;
+  onAuditEvent: (title: string, details: string) => void;
 }
 
 export const CodeViewer: React.FC<CodeViewerProps> = ({
   files,
   selectedFramework,
   onFrameworkChange,
-  currentTestIR
+  currentTestIR,
+  onAuditEvent
 }) => {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
+  const [pendingExport, setPendingExport] = useState<'zip' | 'file' | 'copy' | null>(null);
+  const [validationFindings, setValidationFindings] = useState<ValidationFinding[]>([]);
+  const [exportError, setExportError] = useState('');
 
   const activeFile = files[activeFileIndex] || files[0];
 
-  const handleCopy = () => {
-    if (activeFile?.code) {
-      navigator.clipboard.writeText(activeFile.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleDownloadSingleFile = () => {
+  const downloadSingleFile = () => {
+    if (!activeFile) return;
     const blob = new Blob([activeFile.code], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -52,14 +53,33 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
     a.click();
     document.body.removeChild(a);
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onAuditEvent('Generated file exported', `${activeFile.filepath} · ${selectedFramework}.`);
   };
 
-  const handleExportZip = async () => {
+  const openValidation = (action: 'zip' | 'file' | 'copy') => {
+    setExportError('');
+    setValidationFindings(validateSuiteForExport(currentTestIR, selectedFramework, files, generateCiPipeline('github-actions', selectedFramework, currentTestIR)));
+    setPendingExport(action);
+  };
+
+  const continueExport = async () => {
+    if (!pendingExport || isExporting) return;
     setIsExporting(true);
     try {
-      await exportSuiteAsZip(files, selectedFramework, currentTestIR);
+      if (pendingExport === 'zip') {
+        await exportSuiteAsZip(files, selectedFramework, currentTestIR);
+        onAuditEvent('Test suite exported', `${selectedFramework} · ${files.length} files plus GitHub Actions configuration.`);
+      } else if (pendingExport === 'file') downloadSingleFile();
+      else if (activeFile?.code) {
+        await navigator.clipboard.writeText(activeFile.code);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+        onAuditEvent('Generated file copied', `${activeFile.filepath} · ${selectedFramework}.`);
+      }
+      setPendingExport(null);
     } catch (err) {
-      console.error('Failed to export zip', err);
+      console.error('Failed to export generated code', err);
+      setExportError(err instanceof Error ? err.message : 'The export failed. Try again.');
     } finally {
       setIsExporting(false);
     }
@@ -71,6 +91,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
         isOpen={isGitHubModalOpen}
         onClose={() => setIsGitHubModalOpen(false)}
       />
+      {pendingExport && <ValidationDialog findings={validationFindings} title={pendingExport === 'zip' ? 'Validate suite before export' : pendingExport === 'copy' ? 'Validate suite before copying code' : 'Validate suite before downloading'} continueLabel={pendingExport === 'copy' ? 'Copy code' : pendingExport === 'file' ? 'Download file' : 'Export suite'} busy={isExporting} onClose={() => setPendingExport(null)} onContinue={continueExport} />}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col h-[700px]">
         {/* Top Framework bar */}
@@ -95,7 +116,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
 
             {/* Export Suite Zip CTA */}
             <button
-              onClick={handleExportZip}
+              onClick={() => openValidation('zip')}
               disabled={isExporting}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
             >
@@ -124,6 +145,8 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
             </label>
           </div>
         </div>
+
+        {exportError && <p role="alert" className="border-b border-rose-200 bg-rose-50 px-6 py-2 text-xs text-rose-700">{exportError}</p>}
 
       {/* Editor Body */}
       <div className="flex-1 flex overflow-hidden">
@@ -174,7 +197,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleCopy}
+                onClick={() => openValidation('copy')}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded text-xs transition-colors"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -182,7 +205,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
               </button>
 
               <button
-                onClick={handleDownloadSingleFile}
+                onClick={() => openValidation('file')}
                 className="flex items-center gap-1.5 px-2.5 py-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded text-xs transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />

@@ -11,26 +11,32 @@ import {
 } from 'lucide-react';
 import { FrameworkType, TestIR } from '../types/testAutomation';
 import { CiToolType, generateCiPipeline } from '../utils/ciGenerators';
+import { validateSuiteForExport, ValidationFinding } from '../utils/suiteValidation';
+import { ValidationDialog } from './ValidationDialog';
+import { GeneratedCodeFile } from '../types/testAutomation';
 
 interface CiPipelineGeneratorProps {
   currentTestIR: TestIR;
   selectedFramework: FrameworkType;
+  files: GeneratedCodeFile[];
+  onAuditEvent: (title: string, details: string) => void;
 }
 
 export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
   currentTestIR,
-  selectedFramework
+  selectedFramework,
+  files,
+  onAuditEvent
 }) => {
   const [selectedTool, setSelectedTool] = useState<CiToolType>('github-actions');
   const [copied, setCopied] = useState(false);
+  const [validationFindings, setValidationFindings] = useState<ValidationFinding[]>([]);
+  const [showValidation, setShowValidation] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'download' | 'copy'>('download');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const pipeline = generateCiPipeline(selectedTool, selectedFramework, currentTestIR);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(pipeline.code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleDownload = () => {
     const blob = new Blob([pipeline.code], { type: 'text/plain' });
@@ -42,6 +48,32 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
     a.click();
     document.body.removeChild(a);
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onAuditEvent('CI configuration exported', `${pipeline.filepath} · ${selectedFramework}.`);
+  };
+
+  const openValidation = (action: 'download' | 'copy') => {
+    setExportError('');
+    setPendingAction(action);
+    setValidationFindings(validateSuiteForExport(currentTestIR, selectedFramework, files, pipeline));
+    setShowValidation(true);
+  };
+
+  const continueAction = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      if (pendingAction === 'copy') {
+        await navigator.clipboard.writeText(pipeline.code);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+        onAuditEvent('CI configuration copied', `${pipeline.filepath} · ${selectedFramework}.`);
+      } else handleDownload();
+      setShowValidation(false);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Could not export the CI file.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -106,14 +138,14 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleCopy}
+              onClick={() => openValidation('copy')}
               className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-colors text-xs"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? 'Copied' : 'Copy File'}
             </button>
             <button
-              onClick={handleDownload}
+              onClick={() => openValidation('download')}
               className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-colors text-xs"
             >
               <Download className="w-3.5 h-3.5" />
@@ -121,6 +153,8 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
             </button>
           </div>
         </div>
+
+        {exportError && <p role="alert" className="border-b border-rose-200 bg-rose-50 px-6 py-2 text-xs text-rose-700">{exportError}</p>}
 
         {/* Code display */}
         <div className="p-6 overflow-x-auto max-h-[500px]">
@@ -138,6 +172,7 @@ export const CiPipelineGenerator: React.FC<CiPipelineGeneratorProps> = ({
           <span className="font-mono text-slate-400">Engine: {selectedFramework}</span>
         </div>
       </div>
+      {showValidation && <ValidationDialog findings={validationFindings} title={pendingAction === 'copy' ? 'Validate project before copying' : 'Validate project before download'} continueLabel={pendingAction === 'copy' ? 'Copy CI file' : 'Download CI file'} busy={isExporting} onClose={() => setShowValidation(false)} onContinue={continueAction} />}
     </div>
   );
 };

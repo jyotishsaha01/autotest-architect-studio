@@ -31,6 +31,7 @@ The navigation is organized around the test lifecycle:
 5. **CI/CD pipelines** — create a starter pipeline for GitHub Actions, Jenkins, or GitLab CI.
 6. **Test summary** — inspect the active test's step and locator coverage.
 7. **Notifications** — configure optional Slack, Microsoft Teams, or custom HTTPS webhook destinations.
+8. **Audit history** — review recent suite changes and generated-code activity in this browser.
 
 The summary strip shows the current test case ID, title, number of steps, and target URL. After generating a suite, the target name, test case ID, and sprint fields in the header can be edited. These fields describe the active suite; the **Target Application Base URL** field in Create tests controls the application address used for generated steps and run commands.
 
@@ -127,9 +128,11 @@ In **Generated code**:
    - Selenium · Java
    - Selenium · Python
 2. Review each file in the project tree. Switching framework regenerates the suite for that framework; it does not change the test steps.
-3. Use **Copy Code** to copy the selected file or **Download File** to save that file.
-4. Use **Export Suite (.zip)** to download the generated project files together.
+3. Use **Copy Code** to copy the selected file or **Download File** to save that file. The app first validates the target URL, steps/locators, generated project files, and CI configuration.
+4. Use **Export Suite (.zip)** to review the same validation report before downloading the generated project files together. Fix blocking issues first; warnings can be reviewed and accepted.
 5. Use **GitHub setup** for the repository integration instructions shown by the app.
+
+The validation checks configuration and generated-file structure locally. It does not execute tests or verify that the target URL is reachable from your CI runner. Review any locator warnings and confirm your runner can reach the target environment.
 
 The archive is for the generated **test suite**, not the AutoTest Architect application source. Generated code is a starting point: inspect dependencies, test data, selectors, assertions, and target environment configuration before committing it to a product repository.
 
@@ -178,7 +181,11 @@ Pipeline configuration is a starter file. It does not install itself into your r
 
 These are structural coverage summaries, not execution history, pass rates, time saved, financial ROI, or production quality measurements. The charts update when the active test suite changes.
 
-## 12. Configure Notifications (optional)
+## 12. Review Audit history
+
+Open **Audit history** to review suite creation, appended steps, applied sprint changes, suite metadata edits, generated code, and copied/downloaded exports. Entries include the test case, framework or file details, and a timestamp. The timeline keeps up to 200 events in this browser's local storage. It does not store generated source code, restore earlier suite versions, or sync to other users/devices; treat it as a convenience history, not a centralized compliance audit log.
+
+## 13. Configure Notifications (optional)
 
 Notifications are optional. You can ignore this section if you do not use Slack, Microsoft Teams, or an HTTPS notification endpoint.
 
@@ -196,15 +203,16 @@ The test notification verifies delivery only; it is not a test execution. The ap
 
 Webhook settings are stored server-side, encrypted at rest in production, and depend on the administrator's persistent storage configuration. If saving or testing fails, check the displayed error, app access token, webhook URL, network policy, and server logs without exposing the URL in tickets or chat.
 
-## 13. Access, data, and privacy
+## 14. Access, data, and privacy
 
 - In a production deployment, the workspace may ask for a shared access token. Ask your administrator for it; it is separate from the Gemini API key.
 - Administrators configure `APP_API_TOKEN`, `WEBHOOK_ENCRYPTION_KEY`, `WEBHOOK_STORAGE_PATH`, and `GEMINI_API_KEY` on the server. Users should not put these secrets in frontend build settings or test-case content.
 - The shared access token protects app API calls; it is not an individual user account or role system. Follow your organization's identity and access policies.
 - Written input and uploaded evidence may contain sensitive information. Use synthetic test data and remove secrets before submission. Video is sent to Gemini for analysis when this feature is used.
 - The active test suite lives in the current browser page session. Export generated code to preserve it. Reloading or closing the page can discard unsaved test-suite work. Webhook configuration is stored separately on the server.
+- Audit history is stored locally in the browser and can be removed by clearing this site's browser storage. It is not an authoritative server-side audit log.
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
 | Problem | What to check |
 | --- | --- |
@@ -215,10 +223,12 @@ Webhook settings are stored server-side, encrypted at rest in production, and de
 | Video upload fails or takes too long | Check format and size (maximum 2 GB in the app), network stability, hosting/proxy body-size and timeout settings, temporary disk space, and Gemini quota. Large uploads require the host to support them. |
 | Generated locator does not find an element | Inspect the target page's current DOM, supply an updated accessibility/DOM snippet, and correct the locator in your generated test project. Screenshot/video-derived locators are suggestions, not guaranteed selectors. |
 | Run command fails | Run it from the generated suite directory, install the required language/browser dependencies, and set the target URL and test credentials for your environment. |
+| Pre-export validation warns about the target URL | Replace sample domains with your real test environment URL. A localhost URL is normally unreachable from a hosted CI runner. |
+| Pre-export validation reports missing files or commands | Re-select the framework to regenerate its project files, then confirm the matching CI provider and framework are selected. |
 | CI job cannot reach the target | Check runner network access, target URL, CI secrets, and any VPN or allowlist requirements. |
 | Notification test fails | Save the configuration first, ensure the destination is enabled, confirm the URL is current, and check outbound HTTPS access and provider status. |
 | Notification test works but no test alerts arrive | Configure your external CI system to post real execution events to the app; sending a test notification alone does not connect a test runner. |
 
-## 15. Administrator reference
+## 16. Administrator reference
 
 For deployment, environment variables, authentication, persistent webhook storage, and the webhook dispatch payload, see [README.md](README.md). Production requires a strong `APP_API_TOKEN` and a 256-bit `WEBHOOK_ENCRYPTION_KEY`. Keep the `WEBHOOK_STORAGE_PATH` volume persistent and access-controlled. The included encrypted file store is for a single server instance; a multi-instance deployment needs shared transactional storage.

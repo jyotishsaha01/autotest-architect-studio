@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { 
   Bot, 
   Layers, 
@@ -8,9 +8,11 @@ import {
   ShieldCheck,
   Workflow,
   BarChart3,
-  Bell
+  Bell,
+  History
 } from 'lucide-react';
 import { TestIR, FrameworkType } from './types/testAutomation';
+import { AuditEvent } from './types/audit';
 import { generateAutomationSuite } from './utils/codeGenerators';
 import { InputStudio } from './components/InputStudio';
 import { CodeViewer } from './components/CodeViewer';
@@ -18,6 +20,7 @@ import { SprintUpdateEngine } from './components/SprintUpdateEngine';
 import { TestRunner } from './components/TestRunner';
 import { CiPipelineGenerator } from './components/CiPipelineGenerator';
 import { WebhookSettings } from './components/WebhookSettings';
+import { AuditHistory } from './components/AuditHistory';
 
 const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then(module => ({ default: module.AnalyticsDashboard })));
 
@@ -29,7 +32,18 @@ export default function App() {
   const [currentTestIR, setCurrentTestIR] = useState<TestIR>(EMPTY_TEST_IR);
   const [hasGeneratedSuite, setHasGeneratedSuite] = useState(false);
   const [selectedFramework, setSelectedFramework] = useState<FrameworkType>('playwright-ts');
-  const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'cicd' | 'analytics' | 'webhooks'>('inputs');
+  const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'cicd' | 'analytics' | 'webhooks' | 'audit'>('inputs');
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(() => {
+    try {
+      const stored = localStorage.getItem('autotest-audit-history');
+      const parsed: unknown = stored ? JSON.parse(stored) : [];
+      const validTypes = new Set(['suite_created', 'suite_updated', 'suite_extended', 'code_generated', 'code_exported']);
+      return Array.isArray(parsed)
+        ? (parsed as AuditEvent[]).filter(event => event && typeof event.id === 'string' && typeof event.timestamp === 'string' && Number.isFinite(Date.parse(event.timestamp)) && validTypes.has(event.type) && typeof event.title === 'string' && typeof event.details === 'string' && typeof event.testCaseId === 'string').slice(0, 200)
+        : [];
+    } catch { return []; }
+  });
+  const metadataStart = useRef<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [authState, setAuthState] = useState<'loading' | 'open' | 'required' | 'authorized'>('loading');
   const [apiToken, setApiToken] = useState('');
@@ -41,6 +55,17 @@ export default function App() {
       .then(data => setAuthState(data.authenticationRequired ? 'required' : 'open'))
       .catch(() => setAuthState('open'));
   }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('autotest-audit-history', JSON.stringify(auditEvents)); } catch { /* Browser storage can be disabled or full. */ }
+  }, [auditEvents]);
+
+  const recordAudit = useCallback((type: AuditEvent['type'], title: string, details: string, testCaseId = currentTestIR.testCaseId) => {
+    setAuditEvents(events => [{
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(), type, title: title.slice(0, 120), details: details.slice(0, 500), testCaseId: testCaseId.slice(0, 120)
+    }, ...events].slice(0, 200));
+  }, [currentTestIR.testCaseId]);
 
   const apiFetch = useCallback((input: RequestInfo | URL, init: RequestInit = {}) => {
     const headers = new Headers(init.headers);
@@ -88,14 +113,34 @@ export default function App() {
       : newIR;
     setCurrentTestIR(resultingIR);
     setHasGeneratedSuite(true);
+    const stepCount = resultingIR.steps.length;
+    recordAudit(appendToExisting ? 'suite_extended' : 'suite_created', appendToExisting ? 'Test suite extended' : 'Test suite created', `${stepCount} step${stepCount === 1 ? '' : 's'} in ${resultingIR.feature || 'the current feature'}.`, resultingIR.testCaseId);
+    recordAudit('code_generated', 'Automation code generated', `${selectedFramework} · ${generateAutomationSuite(resultingIR, selectedFramework).length} project files.`, resultingIR.testCaseId);
 
     setActiveView('code');
   };
 
   const handleApplySprintPatch = (updatedIR: TestIR) => {
     setCurrentTestIR(updatedIR);
+    recordAudit('suite_updated', 'Test suite updated', `Applied sprint changes; suite now contains ${updatedIR.steps.length} steps.`, updatedIR.testCaseId);
+    recordAudit('code_generated', 'Automation code regenerated', `${selectedFramework} · ${generateAutomationSuite(updatedIR, selectedFramework).length} project files.`, updatedIR.testCaseId);
     setActiveView('code');
   };
+
+  const auditMetadataEdit = (field: string, value: string) => {
+    const previous = metadataStart.current[field];
+    delete metadataStart.current[field];
+    if (previous !== undefined && previous !== value) {
+      recordAudit('suite_updated', `Suite ${field} changed`, `${previous || '(empty)'} → ${value || '(empty)'}.`);
+      recordAudit('code_generated', 'Automation code regenerated', `${selectedFramework} · suite metadata updated.`);
+    }
+  };
+
+  const handleFrameworkChange = (framework: FrameworkType) => {
+    setSelectedFramework(framework);
+    recordAudit('code_generated', 'Automation code generated', `${framework} · ${generateAutomationSuite(currentTestIR, framework).length} project files.`);
+  };
+
 
   if (authState === 'loading') return <div className="min-h-screen grid place-items-center bg-slate-100 text-sm text-slate-600">Connecting to AutoTest Architect…</div>;
   if (authState === 'required') return (
@@ -144,6 +189,8 @@ export default function App() {
                 title="Edit target name"
                 value={currentTestIR.feature}
                 onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, feature: event.target.value }))}
+                onFocus={(event) => { metadataStart.current.feature = event.currentTarget.value; }}
+                onBlur={(event) => auditMetadataEdit('feature', event.currentTarget.value)}
                 className="w-28 bg-transparent font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
               />
               <span className="text-slate-300">|</span>
@@ -152,6 +199,8 @@ export default function App() {
                 title="Edit test case ID"
                 value={currentTestIR.testCaseId}
                 onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, testCaseId: event.target.value }))}
+                onFocus={(event) => { metadataStart.current.testCaseId = event.currentTarget.value; }}
+                onBlur={(event) => auditMetadataEdit('testCaseId', event.currentTarget.value)}
                 className="w-28 bg-transparent font-mono text-indigo-600 font-semibold outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
               />
               <span className="text-slate-300">|</span>
@@ -160,6 +209,8 @@ export default function App() {
                 title="Edit sprint"
                 value={currentTestIR.sprint}
                 onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, sprint: event.target.value }))}
+                onFocus={(event) => { metadataStart.current.sprint = event.currentTarget.value; }}
+                onBlur={(event) => auditMetadataEdit('sprint', event.currentTarget.value)}
                 className="w-20 bg-transparent font-medium text-slate-600 outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
               />
             </div>}
@@ -278,6 +329,11 @@ export default function App() {
             <Bell className="w-4 h-4" />
             Notifications
           </button>
+
+          <button aria-current={activeView === 'audit' ? 'page' : undefined} onClick={() => setActiveView('audit')} className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${activeView === 'audit' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <History className="w-4 h-4" />
+            Audit history
+          </button>
         </nav>
       </header>
 
@@ -327,8 +383,9 @@ export default function App() {
           <CodeViewer
             files={generatedFiles}
             selectedFramework={selectedFramework}
-            onFrameworkChange={setSelectedFramework}
+            onFrameworkChange={handleFrameworkChange}
             currentTestIR={currentTestIR}
+            onAuditEvent={(title, details) => recordAudit('code_exported', title, details)}
           />
         )}
 
@@ -353,6 +410,8 @@ export default function App() {
           <CiPipelineGenerator
             currentTestIR={currentTestIR}
             selectedFramework={selectedFramework}
+            files={generatedFiles}
+            onAuditEvent={(title, details) => recordAudit('code_exported', title, details)}
           />
         )}
 
@@ -368,6 +427,8 @@ export default function App() {
             apiFetch={apiFetch}
           />
         )}
+
+        {activeView === 'audit' && <AuditHistory events={auditEvents} />}
       </main>
 
     </div>

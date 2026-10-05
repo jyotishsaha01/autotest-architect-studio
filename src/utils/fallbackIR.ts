@@ -54,7 +54,7 @@ export function buildFallbackIR(
       // e.g. "Fill Shipping Address: '100 Market St, San Francisco, CA'"
       // or "Enter username"
       const valMatch = clean.match(/["']([^"']+)["']/);
-      const val = valMatch ? valMatch[1] : 'sample_input';
+      const val = valMatch ? valMatch[1] : '';
       
       let semantic = 'Input field';
       let locator = "input[type='text']";
@@ -172,7 +172,7 @@ export function buildFallbackIR(
     feature: featureName || 'Application Feature',
     sprint: 'Sprint 24',
     priority: 'P0',
-    baseUrl: baseUrl || 'https://demo-shop.autotest.io',
+    baseUrl: baseUrl || 'https://app.example.com',
     preconditions: ['Target environment is online', 'Browser is initialized in headless mode'],
     postconditions: ['Session completed cleanly', 'Assertions evaluated successfully'],
     steps

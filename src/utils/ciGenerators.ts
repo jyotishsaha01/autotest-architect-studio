@@ -25,13 +25,14 @@ export function generateCiPipeline(tool: CiToolType, framework: FrameworkType, i
 
 function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipelineConfig {
   const isPlaywrightTS = framework === 'playwright-ts';
+  const isPlaywrightJS = framework === 'playwright-js';
   const isPlaywrightPython = framework === 'playwright-python';
   const isSeleniumJava = framework === 'selenium-java';
   const isSeleniumPython = framework === 'selenium-python';
 
   let steps = '';
 
-  if (isPlaywrightTS) {
+  if (isPlaywrightTS || isPlaywrightJS) {
     steps = `    - name: Checkout repository
       uses: actions/checkout@v4
 
@@ -42,16 +43,16 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
         cache: 'npm'
 
     - name: Install dependencies
-      run: npm ci
+      run: npm install
 
     - name: Install Playwright Browsers & OS deps
-      run: npx playwright install --with-deps chromium firefox
+      run: npx playwright install --with-deps ${isPlaywrightJS ? 'chromium' : 'chromium firefox'}
 
     - name: Execute Playwright Automated Tests
       run: npx playwright test
       env:
         CI: true
-        BASE_URL: \${{ secrets.APP_BASE_URL || '${ir.baseUrl || 'https://demo-shop.autotest.io'}' }}
+        BASE_URL: \${{ secrets.APP_BASE_URL || '${ir.baseUrl || 'https://app.example.com'}' }}
 
     - name: Upload Playwright Test Report Artifact
       uses: actions/upload-artifact@v4
@@ -81,7 +82,7 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
     - name: Run PyTest Playwright Suite
       run: pytest --junitxml=results/junit.xml tests/
       env:
-        BASE_URL: '${ir.baseUrl || 'https://demo-shop.autotest.io'}'
+        BASE_URL: '${ir.baseUrl || 'https://app.example.com'}'
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
@@ -106,7 +107,7 @@ function generateGitHubActions(framework: FrameworkType, ir: TestIR): CiPipeline
     - name: Run Maven TestNG Automation Suite
       run: mvn clean test -DsuiteXmlFile=testng.xml
       env:
-        APP_URL: '${ir.baseUrl || 'https://demo-shop.autotest.io'}'
+        APP_URL: '${ir.baseUrl || 'https://app.example.com'}'
 
     - name: Publish TestNG Surefire Report
       uses: actions/upload-artifact@v4
@@ -182,7 +183,7 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
   const isSeleniumJava = framework === 'selenium-java';
 
   let testStageCommand = 'npx playwright test';
-  let prepCommands = `sh 'npm ci'\n                sh 'npx playwright install --with-deps'`;
+  let prepCommands = `sh 'npm install'\n                sh 'npx playwright install --with-deps'`;
   let postAction = `publishHTML([
                 allowMissing: false,
                 alwaysLinkToLastBuild: true,
@@ -212,7 +213,7 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
 
     environment {
         CI = 'true'
-        TARGET_URL = '${ir.baseUrl || 'https://demo-shop.autotest.io'}'
+        TARGET_URL = '${ir.baseUrl || 'https://app.example.com'}'
         SPRINT_VERSION = '${ir.sprint || 'Sprint 24'}'
     }
 
@@ -249,7 +250,7 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
             archiveArtifacts artifacts: '**/*.png, **/*.mp4, **/*.log', allowEmptyArchive: true
         }
         failure {
-            echo "Test suite failed on target environment. Triggering Self-Healing diagnostics..."
+            echo "Test suite failed. Review the test output and saved artifacts."
         }
     }
 }
@@ -265,9 +266,8 @@ function generateJenkinsfile(framework: FrameworkType, ir: TestIR): CiPipelineCo
 }
 
 function generateGitLabCi(framework: FrameworkType, ir: TestIR): CiPipelineConfig {
-  const isPlaywrightTS = framework === 'playwright-ts';
   let script = 'npx playwright test';
-  let beforeScript = `  - npm ci\n  - npx playwright install --with-deps`;
+  let beforeScript = `  - npm install\n  - npx playwright install --with-deps`;
 
   if (framework === 'playwright-python') {
     beforeScript = `  - pip install -r requirements.txt\n  - playwright install --with-deps`;
@@ -284,7 +284,7 @@ stages:
 
 variables:
   CI: "true"
-  BASE_URL: "${ir.baseUrl || 'https://demo-shop.autotest.io'}"
+  BASE_URL: "${ir.baseUrl || 'https://app.example.com'}"
   TEST_SPRINT: "${ir.sprint || 'Sprint 24'}"
 
 run_e2e_tests:

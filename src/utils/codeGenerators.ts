@@ -4,6 +4,8 @@ export function generateAutomationSuite(ir: TestIR, framework: FrameworkType): G
   switch (framework) {
     case 'playwright-ts':
       return generatePlaywrightTS(ir);
+    case 'playwright-js':
+      return generatePlaywrightJS(ir);
     case 'playwright-python':
       return generatePlaywrightPython(ir);
     case 'selenium-java':
@@ -13,6 +15,60 @@ export function generateAutomationSuite(ir: TestIR, framework: FrameworkType): G
     default:
       return generatePlaywrightTS(ir);
   }
+}
+
+// Playwright JavaScript generator (ES modules, no TypeScript annotations).
+function generatePlaywrightJS(ir: TestIR): GeneratedCodeFile[] {
+  const pageClassName = `${toPascalCase(ir.feature || 'App')}Page`;
+  const specFileName = `${(ir.testCaseId || 'test').toLowerCase()}_${toCamelCase(ir.title)}.spec.js`;
+  const targets = new Map<string, { semantic: string; locator: string }>();
+
+  ir.steps.forEach((step) => {
+    if (step.target?.semantic && step.target.recommendedLocator) {
+      const key = toCamelCase(step.target.semantic);
+      if (!targets.has(key)) targets.set(key, { semantic: step.target.semantic, locator: step.target.recommendedLocator });
+    }
+  });
+
+  const pageMethods = [...targets].map(([key, target]) => `\n  /** ${target.semantic} */\n  get ${key}() {\n    return this.page.locator(${JSON.stringify(target.locator)});\n  }`).join('\n');
+  const pageObject = `/** Page object for ${ir.feature} (${ir.testCaseId}). */\nexport class ${pageClassName} {\n  constructor(page) {\n    this.page = page;\n  }\n\n  async goto(url = ${JSON.stringify(ir.baseUrl || '/')}) {\n    await this.page.goto(url);\n  }${pageMethods}\n}\n`;
+
+  const steps = ir.steps.map((step) => {
+    const target = step.target?.semantic ? `appPage.${toCamelCase(step.target.semantic)}` : null;
+    let action = `// Action not generated: ${step.action}`;
+    if (step.action === 'navigate') action = `await appPage.goto(${JSON.stringify(step.value || ir.baseUrl || '/')});`;
+    else if (step.action === 'fill' && target) action = `await ${target}.fill(${JSON.stringify(step.value || '')});`;
+    else if (step.action === 'click' && target) action = `await ${target}.click();`;
+    else if (step.action === 'select' && target) action = `await ${target}.selectOption(${JSON.stringify(step.value || '')});`;
+    else if (step.action === 'check' && target) action = `await ${target}.check();`;
+    else if (step.action === 'uncheck' && target) action = `await ${target}.uncheck();`;
+    else if (step.action === 'hover' && target) action = `await ${target}.hover();`;
+    else if (step.action === 'press' && target) action = `await ${target}.press(${JSON.stringify(step.value || 'Enter')});`;
+    else if (step.action === 'wait_for' && target) action = `await ${target}.waitFor();`;
+    else if (step.action === 'assert_visible' && target) action = `await expect(${target}).toBeVisible();`;
+    else if (step.action === 'assert_text' && target) action = `await expect(${target}).toContainText(${JSON.stringify(step.expectedResult || step.value || '')});`;
+    else if (step.action === 'assert_url') action = `await expect(page).toHaveURL(new RegExp(${JSON.stringify(step.value || '')}));`;
+    return `    // Step ${step.stepNumber}: ${step.description}\n    ${action}`;
+  }).join('\n\n');
+
+  const safeFeature = ir.feature.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeTitle = ir.title.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeCaseId = ir.testCaseId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const spec = `import { test, expect } from '@playwright/test';\nimport { ${pageClassName} } from '../pages/${pageClassName}.js';\n\ntest.describe('${safeFeature}: ${safeTitle}', () => {\n  test('${safeCaseId} - ${safeTitle}', async ({ page }) => {\n    const appPage = new ${pageClassName}(page);\n${steps}\n  });\n});\n`;
+  const config = `import { defineConfig, devices } from '@playwright/test';\n\nexport default defineConfig({\n  testDir: './tests',\n  fullyParallel: true,\n  forbidOnly: Boolean(process.env.CI),\n  retries: process.env.CI ? 2 : 0,\n  reporter: [['html'], ['list']],\n  use: {\n    baseURL: process.env.BASE_URL || ${JSON.stringify(ir.baseUrl || 'http://localhost:3000')},\n    trace: 'on-first-retry',\n    screenshot: 'only-on-failure',\n    video: 'retain-on-failure',\n  },\n  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],\n});\n`;
+  const packageJson = JSON.stringify({
+    name: `${(ir.feature || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-playwright-tests`,
+    private: true,
+    type: 'module',
+    scripts: { test: 'playwright test', 'test:headed': 'playwright test --headed', 'test:ui': 'playwright test --ui', report: 'playwright show-report' },
+    devDependencies: { '@playwright/test': '^1.63.0' }
+  }, null, 2);
+  return [
+    { filename: specFileName, filepath: `tests/${specFileName}`, language: 'javascript', framework: 'playwright-js', code: spec, description: 'Playwright JavaScript test' },
+    { filename: `${pageClassName}.js`, filepath: `pages/${pageClassName}.js`, language: 'javascript', framework: 'playwright-js', code: pageObject, description: 'Page object' },
+    { filename: 'playwright.config.js', filepath: 'playwright.config.js', language: 'javascript', framework: 'playwright-js', code: config, description: 'Playwright configuration' },
+    { filename: 'package.json', filepath: 'package.json', language: 'javascript', framework: 'playwright-js', code: packageJson, description: 'Node.js dependencies and test commands' },
+  ];
 }
 
 /**
@@ -141,7 +197,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html'], ['json', { outputFile: 'test-results.json' }]],
   use: {
-    baseURL: '${ir.baseUrl || 'https://app.example.com'}',
+    baseURL: process.env.BASE_URL || '${ir.baseUrl || 'http://localhost:3000'}',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

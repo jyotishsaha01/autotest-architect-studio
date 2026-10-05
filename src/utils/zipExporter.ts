@@ -20,7 +20,7 @@ export async function exportSuiteAsZip(
 
   // Add a clean README.md explaining how to run
   let runCommand = 'npx playwright test';
-  let installCommand = 'npm install && npx playwright install --with-deps';
+  let installCommand = 'npm install && npx playwright install chromium';
   if (framework === 'playwright-python') {
     installCommand = 'pip install -r requirements.txt && playwright install';
     runCommand = 'pytest tests/';
@@ -63,8 +63,10 @@ This suite includes a pre-configured GitHub Actions workflow located at \`.githu
   zip.file('README.md', readmeContent);
 
   // Generate package.json or requirements.txt if needed
-  if (framework === 'playwright-ts') {
+  if (framework === 'playwright-ts' || framework === 'playwright-js') {
+    const isTypeScript = framework === 'playwright-ts';
     const pkgJson = {
+      ...(isTypeScript ? {} : { type: 'module' }),
       name: `${ir.feature.toLowerCase().replace(/[^a-z0-9]/g, '-')}-tests`,
       version: '1.0.0',
       private: true,
@@ -75,9 +77,8 @@ This suite includes a pre-configured GitHub Actions workflow located at \`.githu
         report: 'playwright show-report'
       },
       devDependencies: {
-        '@playwright/test': '^1.44.0',
-        '@types/node': '^20.0.0',
-        typescript: '^5.0.0'
+        '@playwright/test': '^1.63.0',
+        ...(isTypeScript ? { '@types/node': '^22.0.0', typescript: '^5.0.0' } : {})
       }
     };
     zip.file('package.json', JSON.stringify(pkgJson, null, 2));

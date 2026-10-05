@@ -14,31 +14,8 @@ export interface WebhookConfig {
   enabled: boolean;
 }
 
-// In-memory webhooks store
-let webhooks: WebhookConfig[] = [
-  {
-    id: 'webhook-1',
-    name: 'QA Core Alerts (#qa-automation)',
-    type: 'slack',
-    url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX',
-    channel: '#qa-automation',
-    notifyOnPass: true,
-    notifyOnFail: true,
-    notifyOnSelfHeal: true,
-    enabled: true,
-  },
-  {
-    id: 'webhook-2',
-    name: 'Release Engineering (MS Teams)',
-    type: 'teams',
-    url: 'https://outlook.office.com/webhook/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx@xxxxxxxx/IncomingWebhook/xxxxxxxx/xxxxxxxx',
-    channel: 'Release Squad',
-    notifyOnPass: false,
-    notifyOnFail: true,
-    notifyOnSelfHeal: true,
-    enabled: false,
-  }
-];
+// In-memory configuration store. Use a persistent secret store before deploying multiple instances.
+let webhooks: WebhookConfig[] = [];
 
 // Get webhooks
 webhookRouter.get('/webhooks', (req: Request, res: Response) => {
@@ -60,26 +37,32 @@ webhookRouter.post('/webhooks', (req: Request, res: Response) => {
 webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response) => {
   try {
     const { webhookId, eventType, testCaseId, feature, status, durationMs, details } = req.body;
-    const targetWebhook = webhooks.find(w => w.id === webhookId) || webhooks[0];
+    const targetWebhook = webhooks.find(w => w.id === webhookId);
 
     if (!targetWebhook) {
       return res.status(404).json({ error: 'Webhook not found' });
     }
+    if (!targetWebhook.enabled) {
+      return res.status(400).json({ error: 'Enable this endpoint before sending a test notification.' });
+    }
 
     // Build payload according to Slack Block Kit or MS Teams MessageCard format
     let payload: any;
-    const statusEmoji = status === 'passed' ? '✅' : status === 'healed' ? '🪄' : '❌';
+    const isConfigurationTest = status === 'test';
+    const statusEmoji = isConfigurationTest ? '🔌' : status === 'passed' ? '✅' : status === 'healed' ? '🪄' : '❌';
 
     if (targetWebhook.type === 'slack') {
       payload = {
         channel: targetWebhook.channel || '#qa-automation',
-        text: `${statusEmoji} AutoTest Architect: ${testCaseId} - ${feature} execution completed (${status.toUpperCase()})`,
+        text: isConfigurationTest
+          ? `${statusEmoji} AutoTest Architect webhook configuration test for ${testCaseId}`
+          : `${statusEmoji} AutoTest Architect: ${testCaseId} - ${feature} execution completed (${status.toUpperCase()})`,
         blocks: [
           {
             type: 'header',
             text: {
               type: 'plain_text',
-              text: `${statusEmoji} Test Automation Execution Report`,
+              text: isConfigurationTest ? `${statusEmoji} Webhook Configuration Test` : `${statusEmoji} Test Automation Execution Report`,
               emoji: true
             }
           },
@@ -88,15 +71,15 @@ webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response
             fields: [
               { type: 'mrkdwn', text: `*Test Case:*\n${testCaseId}` },
               { type: 'mrkdwn', text: `*Feature:*\n${feature || 'Core Flows'}` },
-              { type: 'mrkdwn', text: `*Outcome:*\n\`${status.toUpperCase()}\`` },
-              { type: 'mrkdwn', text: `*Duration:*\n${durationMs || 420}ms` }
+              { type: 'mrkdwn', text: `*Outcome:*\n\`${isConfigurationTest ? 'TEST EVENT' : status.toUpperCase()}\`` },
+              { type: 'mrkdwn', text: `*Duration:*\n${isConfigurationTest ? 'Not applicable' : `${durationMs}ms`}` }
             ]
           },
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `*Diagnostics & Context:*\n${details || 'All 5 automated steps verified against live DOM.'}`
+              text: `*Details:*\n${details || (isConfigurationTest ? 'Webhook delivery configuration test.' : 'No additional details provided.')}`
             }
           }
         ]
@@ -110,12 +93,12 @@ webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response
         summary: `AutoTest Notification for ${testCaseId}`,
         sections: [
           {
-            activityTitle: `${statusEmoji} AutoTest Architect Execution Result`,
+            activityTitle: isConfigurationTest ? `${statusEmoji} Webhook Configuration Test` : `${statusEmoji} AutoTest Architect Execution Result`,
             activitySubtitle: `Test ${testCaseId} · ${feature}`,
             facts: [
               { name: 'Status', value: status.toUpperCase() },
-              { name: 'Duration', value: `${durationMs || 420}ms` },
-              { name: 'Diagnostics', value: details || 'Headless browser execution completed.' }
+              { name: 'Duration', value: isConfigurationTest ? 'Not applicable' : `${durationMs}ms` },
+              { name: 'Details', value: details || (isConfigurationTest ? 'Webhook delivery configuration test.' : 'No additional details provided.') }
             ],
             markdown: true
           }
@@ -125,9 +108,21 @@ webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response
 
     // Attempt real HTTP POST if valid external URL is supplied
     let externalSuccess = false;
-    let externalStatus = 'Simulated dispatch (mock webhook endpoint)';
+    let externalStatus = 'No notification was sent.';
+    let supportedDestination = false;
+    try {
+      const destination = new URL(targetWebhook.url);
+      supportedDestination = destination.protocol === 'https:' && (
+        (targetWebhook.type === 'slack' && destination.hostname === 'hooks.slack.com' && destination.pathname.startsWith('/services/')) ||
+        (targetWebhook.type === 'teams' && (destination.hostname === 'outlook.office.com' || destination.hostname.endsWith('.webhook.office.com')))
+      );
+    } catch {
+      supportedDestination = false;
+    }
 
-    if (targetWebhook.url && targetWebhook.url.startsWith('https://hooks.')) {
+    if (!supportedDestination) {
+      externalStatus = 'Enter a valid Slack or Teams HTTPS incoming webhook URL. No notification was sent.';
+    } else {
       try {
         const fetchRes = await fetch(targetWebhook.url, {
           method: 'POST',
@@ -142,7 +137,7 @@ webhookRouter.post('/webhooks/test-dispatch', async (req: Request, res: Response
     }
 
     res.json({
-      success: true,
+      success: externalSuccess,
       delivered: true,
       provider: targetWebhook.type,
       externalSuccess,

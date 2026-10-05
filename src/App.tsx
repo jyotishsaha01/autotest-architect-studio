@@ -131,7 +131,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-2xs text-slate-500">
-                Multi-Modal Ingestion · Canonical Test IR · CI/CD Pipelines · Self-Healing · ROI Analytics
+                Multi-Modal Ingestion · Canonical Test IR · CI/CD Pipelines · Self-Healing · QA Analytics
               </p>
             </div>
           </div>
@@ -256,7 +256,7 @@ export default function App() {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            7. Analytics &amp; ROI
+            7. Test Analytics
           </button>
 
           <button

@@ -17,7 +17,6 @@ export interface WebhookConfig {
   name: string;
   type: 'slack' | 'teams' | 'custom';
   url: string;
-  channel?: string;
   notifyOnPass: boolean;
   notifyOnFail: boolean;
   notifyOnSelfHeal: boolean;
@@ -125,11 +124,9 @@ function validateConfig(input: unknown): WebhookConfig[] | null {
     if (!['slack', 'teams', 'custom'].includes(String(value.type))) return null;
     if (typeof value.url !== 'string' || value.url.length > 2048) return null;
     if (!['notifyOnPass', 'notifyOnFail', 'notifyOnSelfHeal', 'enabled'].every(k => typeof value[k] === 'boolean')) return null;
-    if (value.channel !== undefined && (typeof value.channel !== 'string' || value.channel.length > 120)) return null;
     ids.add(value.id);
     result.push({
       id: value.id, name: value.name.trim(), type: value.type as WebhookConfig['type'], url: value.url.trim(),
-      channel: typeof value.channel === 'string' ? value.channel.trim() : undefined,
       notifyOnPass: value.notifyOnPass as boolean, notifyOnFail: value.notifyOnFail as boolean,
       notifyOnSelfHeal: value.notifyOnSelfHeal as boolean, enabled: value.enabled as boolean
     });

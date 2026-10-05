@@ -4,7 +4,7 @@ AutoTest Architect turns QA specifications, screenshots, video frames, and DOM d
 
 ## Features
 
-- Import test steps, CSV/text files, screenshots, video frames, and accessibility markup.
+- Import test steps, CSV/text files, screenshots, raw video walkthroughs (including spoken instructions), and accessibility markup.
 - Normalize input into a framework-independent Test IR.
 - Generate Playwright JavaScript/TypeScript/Python and Selenium Java/Python suites.
 - Create CI pipeline files and incremental sprint updates.

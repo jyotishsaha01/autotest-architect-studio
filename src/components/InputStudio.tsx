@@ -19,16 +19,19 @@ import { TestIR } from '../types/testAutomation';
 import { PRESET_TEST_SHEETS } from '../data/sampleData';
 
 interface InputStudioProps {
-  onIRGenerated: (ir: TestIR) => void;
+  onIRGenerated: (ir: TestIR, appendToExisting: boolean, explicitNavigation: boolean) => void;
   isLoading: boolean;
   setIsLoading: (val: boolean) => void;
+  currentTestIR: TestIR;
+  canAppendToExisting: boolean;
 }
 
-export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoading, setIsLoading }) => {
+export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoading, setIsLoading, currentTestIR, canAppendToExisting }) => {
   const [activeTab, setActiveTab] = useState<'sheet' | 'screenshot' | 'video' | 'dom'>('sheet');
   const [testCaseText, setTestCaseText] = useState(PRESET_TEST_SHEETS[0].stepsText);
   const [featureName, setFeatureName] = useState(PRESET_TEST_SHEETS[0].feature);
   const [baseUrl, setBaseUrl] = useState(PRESET_TEST_SHEETS[0].baseUrl);
+  const [appendToExisting, setAppendToExisting] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -64,6 +67,13 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
   );
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (canAppendToExisting) {
+      setAppendToExisting(true);
+      setTestCaseText('');
+    }
+  }, [canAppendToExisting]);
 
   // Initialize Speech Recognition & Synthesis APIs
   useEffect(() => {
@@ -189,13 +199,11 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
     }
   };
 
-  const handlePresetSelect = (preset: typeof PRESET_TEST_SHEETS[0]) => {
-    setTestCaseText(preset.stepsText);
-    setFeatureName(preset.feature);
-    setBaseUrl(preset.baseUrl);
-  };
-
   const handleGenerateIR = async () => {
+    if (appendToExisting && activeTab === 'sheet' && !testCaseText.trim()) {
+      setErrorMessage('Enter the new test steps you want to add to the existing suite.');
+      return;
+    }
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -225,7 +233,10 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
         throw new Error(data.error || 'Failed to process input into Test IR');
       }
 
-      onIRGenerated(data.testIR);
+      const explicitNavigation = /(?:^|\n)\s*(?:step\s*\d*[:.)-]?\s*)?(?:navigate|go to|open|visit|launch)\b/im.test(textContent);
+      onIRGenerated(data.testIR, appendToExisting, explicitNavigation);
+      setTestCaseText('');
+      setAppendToExisting(true);
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err.message || 'An unexpected error occurred while analyzing the input.');
@@ -248,19 +259,6 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
           </p>
         </div>
 
-        {/* Preset Selector */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg">
-          <span className="text-2xs text-slate-500 font-semibold px-2 uppercase tracking-wider">Starter examples · edit before use</span>
-          {PRESET_TEST_SHEETS.map(preset => (
-            <button
-              key={preset.id}
-              onClick={() => handlePresetSelect(preset)}
-              className="text-xs px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-800 rounded-md transition-all shadow-2xs font-medium border border-slate-200/60"
-            >
-              {preset.name.split(':')[0]}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Target configuration strip */}
@@ -340,6 +338,20 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
 
       {/* Tab Panels */}
       <div className="p-6">
+        {canAppendToExisting && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+              <input type="checkbox" checked={appendToExisting} onChange={event => {
+                setAppendToExisting(event.target.checked);
+                setTestCaseText('');
+              }} className="rounded text-indigo-600 focus:ring-indigo-500" />
+              Add steps to the existing test suite
+            </label>
+            <span className="text-xs text-slate-600">
+              {appendToExisting ? `${currentTestIR.steps.length} steps already in suite · enter only the new steps` : 'Off · replace the current suite with a new test case'}
+            </span>
+          </div>
+        )}
         {activeTab === 'sheet' && (
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">

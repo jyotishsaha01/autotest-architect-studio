@@ -81,7 +81,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
       id: `webhook-${Date.now()}`,
       name: 'New Alert Endpoint',
       type: 'slack',
-      url: 'https://hooks.slack.com/services/T...',
+      url: '',
       channel: '#qa-status',
       notifyOnPass: true,
       notifyOnFail: true,
@@ -109,11 +109,12 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webhookId: webhook.id,
+          eventType: 'configuration-test',
           testCaseId: currentTestIR.testCaseId,
           feature: currentTestIR.feature,
-          status: 'passed',
-          durationMs: 385,
-          details: 'All 5 automated steps executed cleanly against headless Chromium.'
+          status: 'test',
+          durationMs: 0,
+          details: 'Webhook delivery test. This is not a test execution result.'
         })
       });
 
@@ -143,11 +144,11 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-indigo-600" />
             <h2 className="text-base font-semibold text-slate-900">
-              Notification Webhooks (Slack &amp; Microsoft Teams)
+              Notifications
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure incoming webhooks to broadcast automated regression test results, failure traces, and autonomous self-healing updates.
+            Configure Slack, Microsoft Teams, or custom HTTPS endpoints for notifications.
           </p>
         </div>
 
@@ -173,6 +174,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
 
       {/* Webhook Configuration Cards */}
       <div className="p-6 space-y-6">
+        <p className="text-xs text-slate-500">Configuration is held in server memory and resets when the server restarts.</p>
         {webhooks.length === 0 && (
           <div className="py-12 text-center text-slate-400">
             <MessageSquare className="w-10 h-10 mx-auto text-slate-300 mb-2 stroke-[1.5]" />

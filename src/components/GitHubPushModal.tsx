@@ -54,7 +54,7 @@ git push -u origin main
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Push Application Code to Your GitHub
+                GitHub repository setup
               </h3>
               <p className="text-2xs text-slate-500">
                 Target GitHub account: <span className="font-semibold text-slate-700">https://github.com/jyotishsaha01</span>
@@ -76,7 +76,7 @@ git push -u origin main
             <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
               <div className="font-semibold text-indigo-950">
-                Push this project from your local checkout
+                Connect this project from your local checkout
               </div>
               <p className="text-2xs text-indigo-800 leading-relaxed">
                 Sign in to GitHub, create the repository, then run these commands from the project folder. Git uses your configured SSH key or credential manager for authentication.

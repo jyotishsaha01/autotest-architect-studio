@@ -249,8 +249,8 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
         </div>
 
         {/* Preset Selector */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg">
-          <span className="text-2xs text-slate-500 font-semibold px-2 uppercase tracking-wider">Presets:</span>
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg">
+          <span className="text-2xs text-slate-500 font-semibold px-2 uppercase tracking-wider">Starter examples · edit before use</span>
           {PRESET_TEST_SHEETS.map(preset => (
             <button
               key={preset.id}

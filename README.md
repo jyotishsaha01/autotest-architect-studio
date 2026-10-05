@@ -6,9 +6,9 @@ AutoTest Architect turns QA specifications, screenshots, video frames, and DOM d
 
 - Import test steps, CSV/text files, screenshots, video frames, and accessibility markup.
 - Normalize input into a framework-independent Test IR.
-- Generate Playwright TypeScript/Python and Selenium Java/Python suites.
+- Generate Playwright JavaScript/TypeScript/Python and Selenium Java/Python suites.
 - Create CI pipeline files and incremental sprint updates.
-- Inspect a semantic UI graph, execution flow, analytics, and webhook settings.
+- Review run instructions, active-test analytics, and webhook configuration.
 - Export generated test suites. The full application source ZIP action and endpoint have been removed.
 
 ## Run locally
@@ -40,3 +40,5 @@ npm start
 ## Source and secrets
 
 The repository is private. The app does not provide a downloadable archive of its full source. Browser-delivered UI code can still be inspected by visitors, so keep API keys and other secrets on the server and out of client code.
+
+Webhook settings are held in server memory and reset when the process restarts. Use persistent encrypted storage before deploying multiple instances or storing production webhook secrets. The execution screen provides local and CI run instructions; it does not execute tests in the browser workspace.

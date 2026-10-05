@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { 
   BarChart, 
   Bar, 
-  LineChart, 
-  Line, 
   PieChart, 
   Pie, 
   Cell, 
@@ -13,17 +11,10 @@ import {
   Tooltip, 
   Legend, 
   ResponsiveContainer, 
-  AreaChart, 
-  Area 
 } from 'recharts';
 import { 
-  TrendingUp, 
   CheckCircle2, 
-  Clock, 
-  DollarSign, 
   ShieldCheck, 
-  Zap, 
-  Layers,
   ArrowUpRight
 } from 'lucide-react';
 import { TestIR } from '../types/testAutomation';
@@ -67,16 +58,6 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ currentT
     }));
   }, [currentTestIR]);
 
-  // ROI / Manual Testing Hours Saved vs AI Automated Generation
-  const roiData = [
-    { month: 'May', manualHours: 140, aiAutoHours: 24, costSavedUsd: 5800 },
-    { month: 'Jun', manualHours: 165, aiAutoHours: 20, costSavedUsd: 7250 },
-    { month: 'Jul', manualHours: 190, aiAutoHours: 18, costSavedUsd: 8600 },
-    { month: 'Aug', manualHours: 220, aiAutoHours: 16, costSavedUsd: 10200 },
-    { month: 'Sep', manualHours: 250, aiAutoHours: 14, costSavedUsd: 11800 },
-    { month: 'Oct', manualHours: 290, aiAutoHours: 12, costSavedUsd: 13900 },
-  ];
-
   // Locator Resilience Ranking distribution
   const locatorResilienceData = [
     { strategy: 'data-testid / stable ID', count: 18, resilience: 'High' },
@@ -88,8 +69,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ currentT
 
   return (
     <div className="space-y-6">
-      {/* Top ROI KPI Metrics Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* QA delivery metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Test Suite Automation Coverage</span>
@@ -118,36 +99,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ currentT
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Engineering QA Hours Saved</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900">278 hrs</div>
-          <div className="text-2xs text-slate-500 font-medium mt-1">
-            Replaced manual regression cycles
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Calculated QA ROI</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900">$57,550</div>
-          <div className="text-2xs text-emerald-600 font-medium flex items-center gap-1 mt-1">
-            <TrendingUp className="w-3.5 h-3.5" />
-            Estimated net cost reduction
-          </div>
-        </div>
       </div>
 
-      {/* Main Charts Row 1: Sprint Pass/Fail/Healed + ROI Over Time */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Sprint execution trends */}
+      <div className="grid grid-cols-1 gap-6">
         {/* Sprint Pass/Fail Trends */}
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
@@ -178,44 +133,6 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ currentT
           </div>
         </div>
 
-        {/* Automation ROI Over Time */}
-        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Automation ROI: Manual Hours vs. AI Automation</h3>
-              <p className="text-xs text-slate-500">Cumulative labor hours saved per release window.</p>
-            </div>
-            <span className="text-2xs font-mono font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
-              95.8% Efficiency
-            </span>
-          </div>
-
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={roiData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorManual" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorAI" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#f8fafc', fontSize: '11px' }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Area type="monotone" dataKey="manualHours" name="Manual QA Hours (Baseline)" stroke="#f43f5e" strokeWidth={2} fillOpacity={1} fill="url(#colorManual)" />
-                <Area type="monotone" dataKey="aiAutoHours" name="AutoTest Architect Hours" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorAI)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </div>
 
       {/* Row 2: Action Breakdown & Locator Strategy Breakdown */}

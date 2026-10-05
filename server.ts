@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { aiRouter } from './server/aiRouter.js';
 import { webhookRouter } from './server/webhookRouter.js';
+import { requireApiToken } from './server/apiAuth.js';
 
 dotenv.config();
 
@@ -22,8 +23,8 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  app.use(express.json({ limit: '20mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -34,21 +35,24 @@ async function startServer() {
     next();
   });
 
-  // API Routes
-  app.use('/api', aiRouter);
-  app.use('/api', webhookRouter);
-
   // Health check endpoint
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_req, res) => {
     res.json({
       status: 'ok',
-      webhookApiConfigured: !!process.env.APP_API_TOKEN,
+      authenticationRequired: !!process.env.APP_API_TOKEN,
       webhookEncryptionConfigured: true,
       webhookAuthMode: process.env.APP_API_TOKEN ? 'bearer-token' : 'development-open',
       hasApiKey: !!process.env.GEMINI_API_KEY,
       timestamp: new Date().toISOString()
     });
   });
+
+  app.use('/api', requireApiToken);
+  app.get('/api/session', (_req, res) => res.json({ success: true }));
+
+  // API Routes
+  app.use('/api', aiRouter);
+  app.use('/api', webhookRouter);
 
   // Keep unknown API URLs from falling through to the SPA HTML response.
   app.use('/api', (_req, res) => {

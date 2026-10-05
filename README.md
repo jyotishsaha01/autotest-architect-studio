@@ -50,7 +50,7 @@ openssl rand -hex 32 # APP_API_TOKEN
 openssl rand -hex 32 # WEBHOOK_ENCRYPTION_KEY
 ```
 
-Set both values in the deployment secret manager, and set `WEBHOOK_STORAGE_PATH` to the persistent volume. The Notifications screen asks for the API token and holds it in page memory until the page is closed or reloaded. Do not place either server secret in client build variables.
+Set both values in the deployment secret manager, and set `WEBHOOK_STORAGE_PATH` to the persistent volume. The application asks for the API token when opened and holds it in page memory until the page is closed or reloaded. The token protects all API endpoints; it is a shared workspace credential, not individual user identity or role-based access. For per-user access or SSO, put the app behind an identity-aware access proxy. Do not place either server secret in client build variables.
 
 The webhook API supports Slack incoming webhooks, Microsoft Teams incoming webhooks, and custom HTTPS JSON endpoints. It rejects redirects and private network destinations for custom URLs to limit SSRF. CI systems can post real execution events (which respect the configured pass/failure/self-heal switches) to `POST /api/webhooks/dispatch` with `Authorization: Bearer $APP_API_TOKEN` and a JSON body such as:
 

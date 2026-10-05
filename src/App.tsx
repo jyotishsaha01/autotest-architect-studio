@@ -31,6 +31,7 @@ import { GitHubPushModal } from './components/GitHubPushModal';
 
 export default function App() {
   const [currentTestIR, setCurrentTestIR] = useState<TestIR>(SAMPLE_TEST_IR);
+  const [hasGeneratedSuite, setHasGeneratedSuite] = useState(false);
   const [selectedFramework, setSelectedFramework] = useState<FrameworkType>('playwright-ts');
   const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'graph' | 'cicd' | 'analytics' | 'webhooks'>('inputs');
   const [uiElements, setUiElements] = useState<UIElementModel[]>(SAMPLE_UI_GRAPH);
@@ -40,20 +41,43 @@ export default function App() {
   // Derive generated code files from active Test IR and framework
   const generatedFiles = generateAutomationSuite(currentTestIR, selectedFramework);
 
-  const handleIRGenerated = (newIR: TestIR) => {
-    setCurrentTestIR(newIR);
+  const handleIRGenerated = (newIR: TestIR, appendToExisting: boolean, explicitNavigation: boolean) => {
+    const stepsToAppend = appendToExisting && !explicitNavigation && currentTestIR.steps.some(step => step.action === 'navigate')
+      ? newIR.steps.filter((step, index) => {
+          if (index !== 0 || step.action !== 'navigate') return true;
+          const target = step.value || newIR.baseUrl;
+          return target !== newIR.baseUrl && target !== `${newIR.baseUrl}/`;
+        })
+      : newIR.steps;
+    const resultingIR = appendToExisting
+      ? {
+          ...currentTestIR,
+          feature: newIR.feature || currentTestIR.feature,
+          baseUrl: newIR.baseUrl || currentTestIR.baseUrl,
+          steps: [
+            ...currentTestIR.steps,
+            ...stepsToAppend.map((step, index) => ({
+              ...step,
+              id: `append-${Date.now()}-${index}-${step.id}`,
+              stepNumber: currentTestIR.steps.length + index + 1
+            }))
+          ]
+        }
+      : newIR;
+    setCurrentTestIR(resultingIR);
+    setHasGeneratedSuite(true);
 
     // Extract UI Elements into Knowledge Graph
-    const newElements: UIElementModel[] = newIR.steps
+    const newElements: UIElementModel[] = resultingIR.steps
       .filter(s => s.target?.semantic && s.target.recommendedLocator)
       .map(s => ({
         semanticId: `${newIR.feature.toLowerCase().replace(/\s+/g, '.')}.${s.target!.semantic.toLowerCase().replace(/\s+/g, '_')}`,
         businessName: s.target!.semantic,
-        page: newIR.baseUrl ? new URL(newIR.baseUrl).pathname || '/' : '/',
+        page: resultingIR.baseUrl ? new URL(resultingIR.baseUrl).pathname || '/' : '/',
         role: s.target!.role || 'element',
         primaryLocator: s.target!.recommendedLocator!,
         fallbackLocators: s.target!.locators?.map(l => l.selector) || [s.target!.recommendedLocator!],
-        lastUpdatedSprint: newIR.sprint || 'Sprint 1'
+        lastUpdatedSprint: resultingIR.sprint || 'Sprint 1'
       }));
 
     if (newElements.length > 0) {
@@ -283,13 +307,15 @@ export default function App() {
         </div>
 
         {/* View Router */}
-        {activeView === 'inputs' && (
+        <div hidden={activeView !== 'inputs'}>
           <InputStudio
             onIRGenerated={handleIRGenerated}
             isLoading={isLoading}
             setIsLoading={setIsLoading}
+            currentTestIR={currentTestIR}
+            canAppendToExisting={hasGeneratedSuite}
           />
-        )}
+        </div>
 
         {activeView === 'code' && (
           <CodeViewer

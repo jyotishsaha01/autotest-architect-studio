@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as fsSync from 'node:fs';
 import path from 'node:path';
@@ -78,22 +78,6 @@ function persist(next: WebhookConfig[]) {
   writeQueue = operation.catch(() => undefined);
   return operation;
 }
-
-function apiAuth(req: Request, res: Response, next: NextFunction) {
-  const expected = process.env.APP_API_TOKEN;
-  if (!expected) {
-    if (production) return res.status(503).json({ error: 'Webhook API is not configured. Set APP_API_TOKEN.' });
-    return next();
-  }
-  const supplied = req.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
-  const expectedBytes = Buffer.from(expected);
-  const suppliedBytes = Buffer.from(supplied);
-  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) {
-    return res.status(401).json({ error: 'A valid webhook API token is required.' });
-  }
-  next();
-}
-webhookRouter.use('/webhooks', apiAuth);
 
 const requestWindows = new Map<string, { startedAt: number; count: number }>();
 function limitWebhookWrites(req: Request, res: Response, next: NextFunction) {

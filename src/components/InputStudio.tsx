@@ -190,8 +190,8 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
   const handleVideoSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 100 * 1024 * 1024) {
-      setErrorMessage('Choose a video smaller than 100 MB.');
+    if (file.size > 2 * 1024 * 1024 * 1024) {
+      setErrorMessage('Choose a video no larger than 2 GB.');
       event.target.value = '';
       return;
     }
@@ -533,7 +533,7 @@ export const InputStudio: React.FC<InputStudioProps> = ({ onIRGenerated, isLoadi
                   <div><p className="text-sm font-semibold text-slate-800">Upload a test walkthrough</p><p className="mt-1 text-xs text-slate-500">The AI reads visible interactions and listens for spoken test instructions.</p></div>
                   <button type="button" onClick={() => videoInputRef.current?.click()} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><Upload className="h-4 w-4" />Choose video</button>
                   <input ref={videoInputRef} type="file" accept="video/mp4,video/mpeg,video/mov,video/avi,video/x-flv,video/mpg,video/webm,video/wmv,video/3gpp,.mp4,.mpeg,.mov,.avi,.flv,.mpg,.webm,.wmv,.3gp" onChange={handleVideoSelected} className="hidden" />
-                  <p className="text-2xs text-slate-400">MP4, MOV, WebM, AVI, MPEG, WMV or 3GP · maximum 100 MB</p>
+                  <p className="text-2xs text-slate-400">MP4, MOV, WebM, AVI, MPEG, WMV or 3GP · maximum 2 GB. Hosting upload limits may be lower.</p>
                 </div>
               )}
             </div>

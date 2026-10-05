@@ -96,11 +96,11 @@ export const SprintUpdateEngine: React.FC<SprintUpdateEngineProps> = ({
           <div className="flex items-center gap-2">
             <GitBranch className="w-5 h-5 text-indigo-600" />
             <h2 className="text-base font-semibold text-slate-900">
-              Sprint-to-Sprint Incremental Change Engine
+              Update a test suite for a new sprint
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Only supply the delta inputs for the new sprint (new screenshots, button changes, DOM diff). The engine preserves untouched tests and updates affected Page Objects.
+            Describe what changed in the new sprint. Review the proposed test changes before applying them to this suite.
           </p>
         </div>
 

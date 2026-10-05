@@ -19,19 +19,21 @@ const videoMimeByExtension: Record<string, string> = {
   '.avi': 'video/avi', '.flv': 'video/x-flv', '.mpg': 'video/mpg',
   '.webm': 'video/webm', '.wmv': 'video/wmv', '.3gp': 'video/3gpp'
 };
+// Gemini Files API currently supports video files up to 2 GiB per file.
+export const MAX_VIDEO_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const videoUpload = multer({
   storage: multer.diskStorage({
     destination: os.tmpdir(),
     filename: (_req, _file, callback) => callback(null, `autotest-video-${randomUUID()}`)
   }),
-  limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 6, fieldSize: 512 * 1024 }
+  limits: { fileSize: MAX_VIDEO_UPLOAD_BYTES, files: 1, fields: 6, fieldSize: 512 * 1024 }
 });
 
 function receiveVideo(req: Request, res: Response, next: express.NextFunction) {
   videoUpload.single('video')(req, res, error => {
     if (!error) return next();
     const tooLarge = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE';
-    res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'Video exceeds the 100 MB upload limit.' : 'Could not read the uploaded video. Choose a supported video file and try again.' });
+    res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? 'Video exceeds the 2 GB upload limit.' : 'Could not read the uploaded video. Choose a supported video file and try again.' });
   });
 }
 

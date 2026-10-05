@@ -5,27 +5,19 @@ import {
   Code2, 
   GitBranch, 
   Play, 
-  Network, 
-  Sparkles,
-  ArrowRight,
-  ExternalLink,
   ShieldCheck,
-  CheckCircle2,
   Workflow,
   BarChart3,
-  Github,
-  CheckCircle
+  Bell
 } from 'lucide-react';
-import { TestIR, FrameworkType, UIElementModel } from './types/testAutomation';
+import { TestIR, FrameworkType } from './types/testAutomation';
 import { generateAutomationSuite } from './utils/codeGenerators';
 import { InputStudio } from './components/InputStudio';
 import { CodeViewer } from './components/CodeViewer';
 import { SprintUpdateEngine } from './components/SprintUpdateEngine';
 import { TestRunner } from './components/TestRunner';
-import { KnowledgeGraphViewer } from './components/KnowledgeGraphViewer';
 import { CiPipelineGenerator } from './components/CiPipelineGenerator';
 import { WebhookSettings } from './components/WebhookSettings';
-import { GitHubPushModal } from './components/GitHubPushModal';
 
 const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then(module => ({ default: module.AnalyticsDashboard })));
 
@@ -37,10 +29,8 @@ export default function App() {
   const [currentTestIR, setCurrentTestIR] = useState<TestIR>(EMPTY_TEST_IR);
   const [hasGeneratedSuite, setHasGeneratedSuite] = useState(false);
   const [selectedFramework, setSelectedFramework] = useState<FrameworkType>('playwright-ts');
-  const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'graph' | 'cicd' | 'analytics' | 'webhooks'>('inputs');
-  const [uiElements, setUiElements] = useState<UIElementModel[]>([]);
+  const [activeView, setActiveView] = useState<'inputs' | 'code' | 'sprint' | 'execution' | 'cicd' | 'analytics' | 'webhooks'>('inputs');
   const [isLoading, setIsLoading] = useState(false);
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
   const [authState, setAuthState] = useState<'loading' | 'open' | 'required' | 'authorized'>('loading');
   const [apiToken, setApiToken] = useState('');
   const [authError, setAuthError] = useState('');
@@ -99,28 +89,6 @@ export default function App() {
     setCurrentTestIR(resultingIR);
     setHasGeneratedSuite(true);
 
-    // Extract UI Elements into Knowledge Graph
-    const newElements: UIElementModel[] = resultingIR.steps
-      .filter(s => s.target?.semantic && s.target.recommendedLocator)
-      .map(s => ({
-        semanticId: `${newIR.feature.toLowerCase().replace(/\s+/g, '.')}.${s.target!.semantic.toLowerCase().replace(/\s+/g, '_')}`,
-        businessName: s.target!.semantic,
-        page: resultingIR.baseUrl ? new URL(resultingIR.baseUrl).pathname || '/' : '/',
-        role: s.target!.role || 'element',
-        primaryLocator: s.target!.recommendedLocator!,
-        fallbackLocators: s.target!.locators?.map(l => l.selector) || [s.target!.recommendedLocator!],
-        lastUpdatedSprint: resultingIR.sprint || 'Sprint 1'
-      }));
-
-    if (newElements.length > 0) {
-      setUiElements(prev => {
-        const map = new Map<string, UIElementModel>();
-        prev.forEach(e => map.set(e.semanticId, e));
-        newElements.forEach(e => map.set(e.semanticId, e));
-        return Array.from(map.values());
-      });
-    }
-
     setActiveView('code');
   };
 
@@ -167,9 +135,9 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Stats / Active Project pill & Actions */}
+          {/* Editable suite metadata */}
           <div className="flex items-center gap-2.5 text-xs">
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+            {hasGeneratedSuite && <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
               <span className="text-slate-400">Target:</span>
               <input
                 aria-label="Target name"
@@ -194,135 +162,123 @@ export default function App() {
                 onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, sprint: event.target.value }))}
                 className="w-20 bg-transparent font-medium text-slate-600 outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
               />
-            </div>
-
-            {/* Push to GitHub Modal trigger */}
-            <button
-              onClick={() => setIsGitHubModalOpen(true)}
-              title="View instructions for connecting this project to GitHub"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium transition-colors shadow-xs text-xs"
-            >
-              <Github className="w-3.5 h-3.5" />
-              GitHub setup
-            </button>
-
-            <button
-              onClick={() => setActiveView('inputs')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors shadow-xs text-xs"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              New Ingestion
-            </button>
+            </div>}
           </div>
         </div>
 
-        {/* GitHub Push Guide Modal */}
-        <GitHubPushModal
-          isOpen={isGitHubModalOpen}
-          onClose={() => setIsGitHubModalOpen(false)}
-        />
-
         {/* Navigation Tabs */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-1 border-t border-slate-100 overflow-x-auto">
+        <nav aria-label="Workspace sections" className="max-w-7xl mx-auto grid grid-cols-2 gap-1 border-t border-slate-100 px-4 py-2 sm:px-6 md:grid-cols-4 lg:px-8">
           <button
+            aria-current={activeView === 'inputs' ? 'page' : undefined}
             onClick={() => setActiveView('inputs')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
               activeView === 'inputs'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <Layers className="w-4 h-4" />
-            1. Multi-Modal Ingestion
+            Create tests
           </button>
 
           <button
+            aria-current={activeView === 'code' ? 'page' : undefined}
             onClick={() => setActiveView('code')}
             disabled={!hasGeneratedSuite}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+            title={!hasGeneratedSuite ? 'Create a test suite first to view generated code.' : 'View and export generated test code.'}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
               !hasGeneratedSuite
-                ? 'cursor-not-allowed border-transparent text-slate-300'
+                ? 'cursor-not-allowed text-slate-300'
                 : activeView === 'code'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <Code2 className="w-4 h-4" />
-            2. Code Repository ({selectedFramework.split('-')[0].toUpperCase()})
+            Generated code
           </button>
 
           <button
+            aria-current={activeView === 'sprint' ? 'page' : undefined}
             onClick={() => setActiveView('sprint')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'sprint'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+            disabled={!hasGeneratedSuite}
+            title={!hasGeneratedSuite ? 'Create a test suite first to review sprint changes.' : 'Compare new sprint changes with the current test suite.'}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+              !hasGeneratedSuite
+                ? 'cursor-not-allowed text-slate-300'
+                : activeView === 'sprint'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <GitBranch className="w-4 h-4" />
-            3. Sprint Incremental Diff
+            Sprint updates
           </button>
 
           <button
+            aria-current={activeView === 'execution' ? 'page' : undefined}
             onClick={() => setActiveView('execution')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'execution'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+            disabled={!hasGeneratedSuite}
+            title={!hasGeneratedSuite ? 'Create a test suite first to get run instructions.' : 'View commands for installing dependencies and running the suite.'}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+              !hasGeneratedSuite
+                ? 'cursor-not-allowed text-slate-300'
+                : activeView === 'execution'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <Play className="w-4 h-4" />
-            4. Execution Setup
+            Run instructions
           </button>
 
           <button
-            onClick={() => setActiveView('graph')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'graph'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Network className="w-4 h-4" />
-            5. UI Semantic Graph ({uiElements.length})
-          </button>
-
-          <button
+            aria-current={activeView === 'cicd' ? 'page' : undefined}
             onClick={() => setActiveView('cicd')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'cicd'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+            disabled={!hasGeneratedSuite}
+            title={!hasGeneratedSuite ? 'Create a test suite first to generate its CI pipeline.' : 'Generate CI configuration for your test suite.'}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+              !hasGeneratedSuite
+                ? 'cursor-not-allowed text-slate-300'
+                : activeView === 'cicd'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <Workflow className="w-4 h-4" />
-            6. CI/CD Pipelines
+            CI/CD pipelines
           </button>
 
           <button
+            aria-current={activeView === 'analytics' ? 'page' : undefined}
             onClick={() => setActiveView('analytics')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              activeView === 'analytics'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+            disabled={!hasGeneratedSuite}
+            title={!hasGeneratedSuite ? 'Create a test suite first to view its summary.' : 'View metrics for the active test suite.'}
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+              !hasGeneratedSuite
+                ? 'cursor-not-allowed text-slate-300'
+                : activeView === 'analytics'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            7. Test Analytics
+            Test summary
           </button>
 
           <button
+            aria-current={activeView === 'webhooks' ? 'page' : undefined}
             onClick={() => setActiveView('webhooks')}
-            className={`flex items-center gap-2 py-2.5 px-4 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
               activeView === 'webhooks'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
+                ? 'bg-indigo-50 text-indigo-700'
+                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             }`}
           >
-            <Bot className="w-4 h-4" />
-            8. Webhooks &amp; Alerts
+            <Bell className="w-4 h-4" />
+            Notifications
           </button>
-        </div>
+        </nav>
       </header>
 
       {/* Main Content Area */}
@@ -390,13 +346,6 @@ export default function App() {
           <TestRunner
             currentTestIR={currentTestIR}
             selectedFramework={selectedFramework}
-          />
-        )}
-
-        {activeView === 'graph' && (
-          <KnowledgeGraphViewer
-            elements={uiElements}
-            currentTestIR={currentTestIR}
           />
         )}
 

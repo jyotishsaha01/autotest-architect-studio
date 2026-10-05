@@ -81,9 +81,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`AutoTest Architect server running at http://0.0.0.0:${PORT}`);
   });
+  // Large walkthroughs need more than Node's default five-minute body deadline.
+  // Reverse proxies/platform ingress need their own matching body and timeout limits.
+  const uploadTimeoutMs = Number(process.env.VIDEO_UPLOAD_TIMEOUT_MS) || 30 * 60 * 1000;
+  server.requestTimeout = uploadTimeoutMs;
+  server.timeout = 0;
 }
 
 startServer().catch((err) => {

@@ -6,10 +6,7 @@ import {
   Trash2, 
   Check, 
   AlertCircle, 
-  Radio, 
-  ExternalLink,
   MessageSquare,
-  ShieldCheck,
   RefreshCw
 } from 'lucide-react';
 import { TestIR } from '../types/testAutomation';
@@ -38,6 +35,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
   const [isTesting, setIsTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ webhookId: string; success: boolean; message: string; payload?: any } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => { fetchWebhooks(); }, [apiFetch]);
 
@@ -49,6 +47,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
       if (data.webhooks) {
         setWebhooks(data.webhooks);
       }
+      setHasUnsavedChanges(false);
       setAccessError('');
     } catch (err) {
       setAccessError(err instanceof Error ? err.message : 'Failed to load webhook settings.');
@@ -70,6 +69,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
       if (!res.ok) throw new Error(data.error || 'Could not save webhook configuration.');
       if (res.ok) {
         setSaveSuccess(true);
+        setHasUnsavedChanges(false);
         setAccessError('');
         setTimeout(() => setSaveSuccess(false), 2500);
       }
@@ -83,7 +83,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
   const handleAddWebhook = () => {
     const newHook: WebhookConfig = {
       id: `webhook-${Date.now()}`,
-      name: 'New Alert Endpoint',
+      name: 'New notification destination',
       type: 'slack',
       url: '',
       notifyOnPass: true,
@@ -92,14 +92,20 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
       enabled: true
     };
     setWebhooks([...webhooks, newHook]);
+    setHasUnsavedChanges(true);
+    setTestResult(null);
   };
 
   const handleDelete = (id: string) => {
     setWebhooks(webhooks.filter(w => w.id !== id));
+    setHasUnsavedChanges(true);
+    setTestResult(null);
   };
 
   const handleUpdate = (id: string, updates: Partial<WebhookConfig>) => {
     setWebhooks(webhooks.map(w => w.id === id ? { ...w, ...updates } : w));
+    setHasUnsavedChanges(true);
+    setTestResult(null);
   };
 
   const handleTestDispatch = async (webhook: WebhookConfig) => {
@@ -150,8 +156,8 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
               Notifications
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure Slack, Microsoft Teams, or custom HTTPS endpoints for notifications.
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Optional: use this only if you want test results delivered to Slack or Teams. A webhook is a private channel URL that lets this app send messages.
           </p>
         </div>
 
@@ -161,7 +167,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add Webhook
+            Add destination
           </button>
 
           <button
@@ -170,20 +176,31 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
             className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
           >
             {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : saveSuccess ? <Check className="w-3.5 h-3.5" /> : null}
-            {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save Configuration'}
+            {isSaving ? 'Saving...' : saveSuccess ? 'Saved!' : 'Save changes'}
           </button>
         </div>
       </div>
 
       {/* Webhook Configuration Cards */}
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-6">
         {accessError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">{accessError}</p>}
+        <section aria-label="How notifications work" className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 sm:p-5">
+          <h3 className="text-sm font-semibold text-slate-900">How to set this up</h3>
+          <ol className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+            <li><span className="font-semibold text-indigo-700">1. Add a destination.</span> Create an incoming webhook in Slack or Teams, then paste its URL below.</li>
+            <li><span className="font-semibold text-indigo-700">2. Choose alerts.</span> Select which test outcomes should send a message and save your changes.</li>
+            <li><span className="font-semibold text-indigo-700">3. Check delivery.</span> Send a test notification and confirm it appears in the selected channel.</li>
+          </ol>
+          <p className="mt-3 border-t border-indigo-100 pt-3 text-xs leading-5 text-slate-600">
+            This app generates tests but does not run them. Real pass/fail alerts require your CI pipeline to send test results to the app. The test notification only checks that this destination can receive a message. If you do not use chat alerts or CI reporting, you can ignore this section.
+          </p>
+        </section>
         {webhooks.length === 0 && (
-          <div className="py-12 text-center text-slate-400">
+          <div className="rounded-xl border border-dashed border-slate-300 py-10 text-center text-slate-500">
             <MessageSquare className="w-10 h-10 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
-            <p className="text-xs font-medium text-slate-600">No Webhook Endpoints Configured</p>
-            <p className="text-2xs text-slate-400 mt-0.5">
-              Click 'Add Webhook' above to connect Slack or Microsoft Teams channels.
+            <p className="text-sm font-medium text-slate-700">No notification destinations yet</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Select <span className="font-medium">Add destination</span> after you create an incoming webhook URL in Slack or Teams.
             </p>
           </div>
         )}
@@ -197,13 +214,18 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
           >
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                 <input
+                  aria-label={`Enable ${hook.name}`}
                   type="checkbox"
                   checked={hook.enabled}
                   onChange={(e) => handleUpdate(hook.id, { enabled: e.target.checked })}
                   className="rounded text-indigo-600 focus:ring-indigo-500"
                 />
+                Enabled
+                </label>
                 <input
+                  aria-label="Destination name"
                   type="text"
                   value={hook.name}
                   onChange={(e) => handleUpdate(hook.id, { name: e.target.value })}
@@ -212,8 +234,10 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-2xs text-slate-400">Platform:</span>
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                Platform
                 <select
+                  aria-label="Notification platform"
                   value={hook.type}
                   onChange={(e) => handleUpdate(hook.id, { type: e.target.value as any })}
                   className="text-xs px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -222,6 +246,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
                   <option value="teams">Microsoft Teams (Workflows / Incoming Webhook)</option>
                   <option value="custom">Custom Webhook / HTTP</option>
                 </select>
+                </label>
 
                 <button
                   onClick={() => handleDelete(hook.id)}
@@ -236,14 +261,14 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
             {/* Inputs */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-2xs font-semibold uppercase text-slate-500 mb-1">
-                  Webhook Target URL
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                  Incoming webhook URL
                 </label>
                 <input
                   type="password"
                   value={hook.url}
                   onChange={(e) => handleUpdate(hook.id, { url: e.target.value })}
-                  placeholder="https://hooks.slack.com/services/..."
+                  placeholder={hook.type === 'slack' ? 'https://hooks.slack.com/services/…' : 'Paste the incoming webhook URL'}
                   className="w-full text-xs font-mono px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -253,7 +278,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
             {/* Notification Triggers */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
               <div className="flex flex-wrap items-center gap-5 text-xs text-slate-700">
-                <span className="text-2xs font-semibold uppercase text-slate-400">Trigger On:</span>
+                <span className="text-xs font-semibold text-slate-600">Notify me when:</span>
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
@@ -261,7 +286,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
                     onChange={(e) => handleUpdate(hook.id, { notifyOnPass: e.target.checked })}
                     className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span>Test Passes</span>
+                  <span>Test passes</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -270,7 +295,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
                     onChange={(e) => handleUpdate(hook.id, { notifyOnFail: e.target.checked })}
                     className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span>Test Failures</span>
+                  <span>Test fails</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -279,17 +304,18 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
                     onChange={(e) => handleUpdate(hook.id, { notifyOnSelfHeal: e.target.checked })}
                     className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
-                  <span>Autonomous Self-Heal Fixes</span>
+                    <span title="Only sent when an external CI integration reports a healed result.">Test recovers after a locator repair <span className="text-slate-500">(CI only)</span></span>
                 </label>
               </div>
 
               <button
                 onClick={() => handleTestDispatch(hook)}
-                disabled={isTesting === hook.id}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+                disabled={isTesting === hook.id || !hook.enabled || !hook.url.trim() || hasUnsavedChanges}
+                title={hasUnsavedChanges ? 'Save changes before sending a test notification.' : !hook.url.trim() ? 'Add a webhook URL first.' : !hook.enabled ? 'Enable this destination first.' : 'Send a sample message to verify this destination.'}
+                className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
-                {isTesting === hook.id ? 'Sending...' : 'Test Ping'}
+                {isTesting === hook.id ? 'Sending…' : 'Send test notification'}
               </button>
             </div>
 
@@ -309,6 +335,9 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR,
             )}
           </div>
         ))}
+        {hasUnsavedChanges && webhooks.length > 0 && (
+          <p role="status" className="text-xs text-amber-800">You have unsaved changes. Save changes before sending a test notification.</p>
+        )}
       </div>
     </div>
   );

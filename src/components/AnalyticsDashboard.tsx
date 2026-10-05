@@ -32,8 +32,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ currentT
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Test analytics</h2>
-        <p className="mt-1 text-sm text-slate-600">A summary of the active test case: {currentTestIR.testCaseId}.</p>
+        <h2 className="text-lg font-semibold text-slate-900">Test summary</h2>
+        <p className="mt-1 text-sm text-slate-600">Step and locator coverage for the active test case: {currentTestIR.testCaseId}.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

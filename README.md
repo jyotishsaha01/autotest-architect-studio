@@ -22,6 +22,8 @@ cp .env.example .env
 
 Add `GEMINI_API_KEY` to `.env` to enable Gemini-powered synthesis. Without it, the app can still use its deterministic fallback parser; provider-specific AI features need their corresponding server-side credentials.
 
+Raw walkthrough uploads support files up to 2 GB in the app and use Gemini's Files API. The deployment must also allow multipart request bodies up to 2 GB, allow requests to upload for up to 30 minutes (configurable with `VIDEO_UPLOAD_TIMEOUT_MS`), and provide temporary disk space for the uploaded file. Check and configure the reverse proxy and hosting platform limits before deployment; some serverless platforms cannot accept uploads this large. Gemini's applicable quota and billing limits still apply.
+
 Start the development server:
 
 ```sh

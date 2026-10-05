@@ -33,6 +33,8 @@ interface WebhookSettingsProps {
 export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR }) => {
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [apiToken, setApiToken] = useState('');
+  const [accessError, setAccessError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ webhookId: string; success: boolean; message: string; payload?: any } | null>(null);
@@ -42,15 +44,22 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
     fetchWebhooks();
   }, []);
 
+  const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) => fetch(input, {
+    ...init,
+    headers: { ...init.headers, ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}) }
+  });
+
   const fetchWebhooks = async () => {
     try {
-      const res = await fetch('/api/webhooks');
+      const res = await apiFetch('/api/webhooks');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load webhook settings.');
       if (data.webhooks) {
         setWebhooks(data.webhooks);
       }
+      setAccessError('');
     } catch (err) {
-      console.error('Failed to load webhooks', err);
+      setAccessError(err instanceof Error ? err.message : 'Failed to load webhook settings.');
     } finally {
       setIsLoading(false);
     }
@@ -60,17 +69,20 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const res = await fetch('/api/webhooks', {
+      const res = await apiFetch('/api/webhooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ webhooks })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save webhook configuration.');
       if (res.ok) {
         setSaveSuccess(true);
+        setAccessError('');
         setTimeout(() => setSaveSuccess(false), 2500);
       }
     } catch (err) {
-      console.error(err);
+      setAccessError(err instanceof Error ? err.message : 'Could not save webhook configuration.');
     } finally {
       setIsSaving(false);
     }
@@ -104,7 +116,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
     setTestResult(null);
 
     try {
-      const res = await fetch('/api/webhooks/test-dispatch', {
+      const res = await apiFetch('/api/webhooks/test-dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,11 +131,11 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.externalStatus || data.error || 'Webhook delivery failed.');
       setTestResult({
         webhookId: webhook.id,
         success: data.success,
         message: data.externalStatus || 'Test alert payload structured and dispatched.',
-        payload: data.sentPayload
       });
     } catch (err: any) {
       setTestResult({
@@ -174,7 +186,16 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
 
       {/* Webhook Configuration Cards */}
       <div className="p-6 space-y-6">
-        <p className="text-xs text-slate-500">Configuration is held in server memory and resets when the server restarts.</p>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <label className="block text-xs font-semibold text-slate-700 mb-1" htmlFor="webhook-api-token">Webhook API access token</label>
+          <div className="flex gap-2">
+            <input id="webhook-api-token" type="password" autoComplete="off" value={apiToken} onChange={e => setApiToken(e.target.value)} placeholder="Paste the server APP_API_TOKEN" className="min-w-0 flex-1 text-xs font-mono px-3 py-2 bg-white border border-slate-200 rounded-lg" />
+            <button type="button" onClick={() => fetchWebhooks()} className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-medium">Connect</button>
+            {apiToken && <button type="button" onClick={() => setApiToken('')} className="px-3 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs">Clear</button>}
+          </div>
+          <p className="mt-1 text-2xs text-slate-500">The token remains in page memory until you leave or reload this page. Webhook URLs are encrypted on the server and saved to its persistent data volume.</p>
+          {accessError && <p role="alert" className="mt-2 text-xs text-rose-700">{accessError}</p>}
+        </div>
         {webhooks.length === 0 && (
           <div className="py-12 text-center text-slate-400">
             <MessageSquare className="w-10 h-10 mx-auto text-slate-300 mb-2 stroke-[1.5]" />
@@ -216,7 +237,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
                   className="text-xs px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="slack">Slack (Incoming Webhook)</option>
-                  <option value="teams">Microsoft Teams (Connector)</option>
+                  <option value="teams">Microsoft Teams (Workflows / Incoming Webhook)</option>
                   <option value="custom">Custom Webhook / HTTP</option>
                 </select>
 
@@ -237,7 +258,7 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
                   Webhook Target URL
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   value={hook.url}
                   onChange={(e) => handleUpdate(hook.id, { url: e.target.value })}
                   placeholder="https://hooks.slack.com/services/..."
@@ -306,19 +327,14 @@ export const WebhookSettings: React.FC<WebhookSettingsProps> = ({ currentTestIR 
             {testResult && testResult.webhookId === hook.id && (
               <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
                 <div className="flex items-center justify-between font-semibold">
-                  <span className="flex items-center gap-1.5 text-emerald-700">
-                    <Check className="w-4 h-4 text-emerald-600" />
+                  <span className={`flex items-center gap-1.5 ${testResult.success ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {testResult.success ? <Check className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
                     {testResult.message}
                   </span>
                   <span className="text-2xs font-mono text-slate-400">
                     Format: {hook.type.toUpperCase()}
                   </span>
                 </div>
-                {testResult.payload && (
-                  <pre className="p-2 bg-slate-900 text-slate-200 font-mono text-2xs rounded overflow-x-auto max-h-36">
-                    {JSON.stringify(testResult.payload, null, 2)}
-                  </pre>
-                )}
               </div>
             )}
           </div>

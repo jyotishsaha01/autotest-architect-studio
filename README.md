@@ -1,88 +1,42 @@
-# AutoTest Architect — AI Multi-Modal Test Automation Studio
+# AutoTest Architect
 
-AutoTest Architect is a production-grade test automation engineering platform that ingests multi-modal QA inputs (test specifications, Excel/CSV sheets, UI mockups/screenshots, video timeline logs, or live DOM accessibility trees) and synthesizes clean Page Object Models (POM), typed test specifications, and CI/CD pipelines.
+AutoTest Architect turns QA specifications, screenshots, video frames, and DOM data into structured test cases and generated automation suites.
 
----
+## Features
 
-## 🚀 Key Features
+- Import test steps, CSV/text files, screenshots, video frames, and accessibility markup.
+- Normalize input into a framework-independent Test IR.
+- Generate Playwright TypeScript/Python and Selenium Java/Python suites.
+- Create CI pipeline files and incremental sprint updates.
+- Inspect a semantic UI graph, execution flow, analytics, and webhook settings.
+- Export generated test suites. The full application source ZIP action and endpoint have been removed.
 
-- **Multi-Modal Test Ingestion**: Ingests test steps, preconditions, assertions, video keyframes, or live DOM structures.
-- **Canonical Test Intermediate Representation (Test IR)**: Framework-agnostic schema with multi-tier locator rankings (Role > testid > Label > CSS > XPath).
-- **Multi-Framework Code Generation**:
-  - Playwright (TypeScript & Python)
-  - Selenium 4 (Java TestNG & Python PyTest)
-- **Sprint-to-Sprint Incremental Change Engine**: Input only what changed in the current sprint to surgically update affected Page Objects and locators.
-- **Autonomous Self-Healing Runtime**: Evaluates failed element interactions against live DOM and automatically suggests and applies repaired locators.
-- **UI Semantic Entity Graph**: Maps business identities (e.g. `auth.login.submit`) across releases to prevent locator drift.
-- **CI/CD Pipeline Generator**: Generates GitHub Actions workflows, Jenkinsfiles, and GitLab CI configurations.
-- **Analytics & ROI Dashboard**: Recharts-powered metrics for sprint pass/fail rates, flakiness risk matrices, and engineering hours saved.
-- **Webhooks & Alerts**: Push test run completions, failure traces, and self-heal patches directly to Slack or Microsoft Teams.
+## Run locally
 
----
+Requirements: Node.js 20.19+ (or 22.12+) and npm.
 
-## 🛠️ Local Development & Setup
-
-### 1. Prerequisites
-- Node.js 20.19+ or 22.12+
-- npm or yarn
-
-### 2. Installation
-\`\`\`bash
-# Clone or extract this repository
-git clone https://github.com/jyotishsaha01/autotest-architect-studio.git
-cd autotest-architect-studio
-
-# Install dependencies
-npm install
-\`\`\`
-
-### 3. Environment Variables
-Create a \`.env\` file in the root directory (refer to \`.env.example\`):
-\`\`\`bash
+```sh
+npm ci
 cp .env.example .env
-\`\`\`
+```
 
-Add your Google Gemini API key:
-\`\`\`env
-PORT=3000
-GEMINI_API_KEY=your_gemini_api_key_here
-\`\`\`
+Add `GEMINI_API_KEY` to `.env` to enable Gemini-powered synthesis. Without it, the app can still use its deterministic fallback parser; provider-specific AI features need their corresponding server-side credentials.
 
-### 4. Running the Development Server
-\`\`\`bash
+Start the development server:
+
+```sh
 npm run dev
-\`\`\`
-Visit \`http://localhost:3000\` in your browser.
+```
 
-### 5. Building for Production
-\`\`\`bash
+Open <http://localhost:3000>.
+
+Build and run the production server:
+
+```sh
 npm run build
 npm start
-\`\`\`
+```
 
----
+## Source and secrets
 
-## 📦 How to Push to Your GitHub Profile
-
-If pushing to \`https://github.com/jyotishsaha01\`:
-
-\`\`\`bash
-# 1. Initialize git (if not already initialized)
-git init
-git add .
-git commit -m "feat: Initial commit for AutoTest Architect Studio"
-
-# 2. Set default branch to main
-git branch -M main
-
-# 3. Add your remote repository:
-git remote add origin https://github.com/jyotishsaha01/autotest-architect-studio.git
-
-# 4. Push using your GitHub credentials (or personal access token / SSH key):
-git push -u origin main
-\`\`\`
-
----
-
-## 📄 License
-MIT License
+The repository is private. The app does not provide a downloadable archive of its full source. Browser-delivered UI code can still be inspected by visitors, so keep API keys and other secrets on the server and out of client code.

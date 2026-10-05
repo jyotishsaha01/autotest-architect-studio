@@ -140,11 +140,29 @@ export default function App() {
           <div className="flex items-center gap-2.5 text-xs">
             <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
               <span className="text-slate-400">Target:</span>
-              <span className="font-semibold text-slate-800">{currentTestIR.feature}</span>
+              <input
+                aria-label="Target name"
+                title="Edit target name"
+                value={currentTestIR.feature}
+                onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, feature: event.target.value }))}
+                className="w-28 bg-transparent font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
+              />
               <span className="text-slate-300">|</span>
-              <span className="font-mono text-indigo-600 font-semibold">{currentTestIR.testCaseId}</span>
+              <input
+                aria-label="Test case ID"
+                title="Edit test case ID"
+                value={currentTestIR.testCaseId}
+                onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, testCaseId: event.target.value }))}
+                className="w-28 bg-transparent font-mono text-indigo-600 font-semibold outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
+              />
               <span className="text-slate-300">|</span>
-              <span className="font-medium text-slate-600">{currentTestIR.sprint}</span>
+              <input
+                aria-label="Sprint"
+                title="Edit sprint"
+                value={currentTestIR.sprint}
+                onChange={(event) => setCurrentTestIR((ir) => ({ ...ir, sprint: event.target.value }))}
+                className="w-20 bg-transparent font-medium text-slate-600 outline-none focus:ring-1 focus:ring-indigo-300 rounded px-1"
+              />
             </div>
 
             {/* Push to GitHub Modal trigger */}

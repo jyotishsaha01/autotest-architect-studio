@@ -1,4 +1,4 @@
-export type FrameworkType = 'playwright-ts' | 'playwright-python' | 'selenium-java' | 'selenium-python';
+export type FrameworkType = 'playwright-ts' | 'playwright-js' | 'playwright-python' | 'selenium-java' | 'selenium-python';
 
 export type ActionType = 
   | 'navigate'
@@ -80,7 +80,7 @@ export interface SprintChangeDiff {
 export interface GeneratedCodeFile {
   filename: string;
   filepath: string;
-  language: 'typescript' | 'python' | 'java';
+  language: 'typescript' | 'javascript' | 'python' | 'java';
   framework: FrameworkType;
   code: string;
   description: string;
